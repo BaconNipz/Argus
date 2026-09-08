@@ -36,6 +36,7 @@
 - Add screenshot/file attachment evidence records.
 - Add local-only investigation templates.
 - Add Android system file picker support for evidence attachment.
+- Add signed release APK publishing once private signing secrets are configured.
 
 ## v0.5 OSINT Workbench
 

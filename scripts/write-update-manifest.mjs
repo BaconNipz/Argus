@@ -14,6 +14,7 @@ if (!apkPath || !apkUrl) {
 
 const apk = await readFile(apkPath);
 const sha256 = createHash("sha256").update(apk).digest("hex");
+const notes = await readReleaseNotes();
 
 const manifest = {
   appId: CURRENT_ANDROID_BUILD.appId,
@@ -22,7 +23,7 @@ const manifest = {
   apkUrl,
   sha256,
   releaseDate: new Date().toISOString().slice(0, 10),
-  notes: [`Argus ${CURRENT_ANDROID_BUILD.versionName} APK update.`]
+  notes
 };
 
 const targetPath = isAbsolute(outputPath) ? outputPath : join(root, outputPath);
@@ -31,3 +32,18 @@ await mkdir(dirname(targetPath), { recursive: true });
 await writeFile(targetPath, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`Wrote update manifest for ${CURRENT_ANDROID_BUILD.versionName}`);
 console.log(`sha256 ${sha256}`);
+
+async function readReleaseNotes() {
+  try {
+    const existing = JSON.parse(await readFile(join(root, "public/update.json"), "utf8"));
+    if (
+      existing.versionName === CURRENT_ANDROID_BUILD.versionName &&
+      Array.isArray(existing.notes) &&
+      existing.notes.length > 0
+    ) {
+      return existing.notes.map(String);
+    }
+  } catch {}
+
+  return [`Argus ${CURRENT_ANDROID_BUILD.versionName} APK update.`];
+}

@@ -45,6 +45,8 @@ The scaffold now includes:
 - Android share-sheet intake for `text/plain`.
 - Local asset loading from `app/src/main/assets/argus/index.html`.
 - A conservative `open_url` dispatch example.
+- Android file chooser support for local evidence attachments.
+- Signed release build support through private signing settings.
 
 Before opening the native project, run:
 
@@ -54,3 +56,5 @@ node scripts/sync-native-assets.mjs
 ```
 
 Then open `native-android/` in Android Studio.
+
+For repeat install-over-install updates, configure a private release keystore through GitHub Actions secrets or Android Studio signing settings. Debug APKs are useful for quick testing, but Android treats each different signing key as a different update chain.

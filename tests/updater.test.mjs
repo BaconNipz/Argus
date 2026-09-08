@@ -9,15 +9,15 @@ import {
 
 test("normalizes update manifests", () => {
   const manifest = normalizeUpdateManifest({
-    versionCode: "4",
-    versionName: "0.4.0",
+    versionCode: "5",
+    versionName: "0.4.1",
     apkUrl: "https://example.com/argus.apk",
     notes: ["New build"]
   });
 
   assert.equal(manifest.appId, CURRENT_ANDROID_BUILD.appId);
-  assert.equal(manifest.versionCode, 4);
-  assert.equal(manifest.versionName, "0.4.0");
+  assert.equal(manifest.versionCode, 5);
+  assert.equal(manifest.versionName, "0.4.1");
 });
 
 test("compares Android version codes", () => {
@@ -60,4 +60,3 @@ test("rejects update manifests for another app", async () => {
     /appId mismatch/
   );
 });
-

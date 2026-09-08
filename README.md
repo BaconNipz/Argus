@@ -1,8 +1,8 @@
-# Argus v0.4
+# Argus v0.4.1
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
-The current working build is an installable offline web app core, with the first native Android shell scaffold under `native-android/`. Argus v0.4 adds local search, structured memory review, OSINT lead templates, source reliability labels and evidence attachments.
+The current working build is an installable offline web app core, with the first native Android shell scaffold under `native-android/`. Argus v0.4 adds local search, structured memory review, OSINT lead templates, source reliability labels and evidence attachments. Argus v0.4.1 fixes the release workflow so signed APKs become the real update channel once private signing secrets are configured.
 
 ## What v0.1 Does
 
@@ -21,6 +21,7 @@ The current working build is an installable offline web app core, with the first
 - Includes a Kotlin Android shell scaffold for Android Studio.
 - Includes a GitHub Actions workflow for building APK artifacts.
 - Includes update manifest support so newer APKs can be queued for install.
+- Publishes signed release APKs when private signing secrets are configured.
 - Keeps cloud AI optional rather than baked into the foundation.
 
 ## Run Locally
@@ -62,3 +63,5 @@ Argus v0.2 adds the first bridge boundary. Phone actions are drafted into a loca
 Argus v0.3 adds the APK/update path. Android updates require the same package name, a higher version code and the same signing key.
 
 Argus v0.4 adds local memory review and OSINT evidence handling while keeping cloud AI optional.
+
+Argus v0.4.1 adds the signed release update chain. Debug APKs remain useful for quick tests, but real repeat updates need the same private signing key every time.

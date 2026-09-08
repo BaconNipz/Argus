@@ -1,14 +1,15 @@
 {
   "appId": "com.argus.localcore",
-  "versionCode": 4,
-  "versionName": "0.4.0",
-  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.4.0/Argus-v0.4.0-debug.apk",
+  "versionCode": 5,
+  "versionName": "0.4.1",
+  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.4.1/Argus-v0.4.1-release.apk",
   "sha256": "",
   "releaseDate": "2026-09-08",
   "notes": [
     "Local search across memory, cases, sources, evidence and voice notes.",
     "Structured memory types and sensitivity review.",
     "OSINT lead templates with source reliability labels.",
-    "Evidence attachments through the Android system file picker."
+    "Evidence attachments through the Android system file picker.",
+    "Workflow now publishes signed release APKs when release signing secrets are configured."
   ]
 }

@@ -1,4 +1,4 @@
-export const ARGUS_VERSION = "0.4.0";
+export const ARGUS_VERSION = "0.4.1";
 
 export const MEMORY_TYPES = ["note", "person", "project", "source", "place", "account", "task"];
 export const MEMORY_SENSITIVITY = ["normal", "sensitive", "private"];

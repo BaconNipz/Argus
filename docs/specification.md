@@ -77,6 +77,15 @@ Argus v0.4 turns the foundation into a more useful local assistant and OSINT wor
 - Evidence records with local file attachments, notes and tags.
 - Android WebView file picker support for evidence attachment.
 
+## v0.4.1 Scope
+
+Argus v0.4.1 stabilises the early Android release update path:
+
+- Keep Android signing keys out of source control.
+- Publish signed release APK assets when signing secrets are configured.
+- Keep debug fallback APKs available only for early testing.
+- Preserve private release signing behind GitHub Actions secrets.
+
 ## v0.1 Non-Goals
 
 - No cloud AI integration.
