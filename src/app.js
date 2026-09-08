@@ -15,7 +15,7 @@ import {
   summarizeStats
 } from "./argus-core.js";
 import { dispatchNativeAction, readNativeBridgeInfo, registerNativeInbox } from "./android-bridge.js";
-import { CURRENT_ANDROID_BUILD, checkForUpdate } from "./updater.js";
+import { CURRENT_ANDROID_BUILD, DEFAULT_UPDATE_MANIFEST_URL, checkForUpdate } from "./updater.js";
 import {
   clearStore,
   deleteRecord,
@@ -698,7 +698,7 @@ function renderPayloadSummary(payload) {
 }
 
 function renderSettings() {
-  const updateManifestUrl = getSettingValue("updateManifestUrl", "./update.json");
+  const updateManifestUrl = getSettingValue("updateManifestUrl", DEFAULT_UPDATE_MANIFEST_URL);
   return `
     <section class="band">
       <div class="section-head">
@@ -938,7 +938,8 @@ async function handleImport(form) {
 }
 
 async function handleUpdateSettings(form) {
-  const manifestUrl = String(new FormData(form).get("manifestUrl") || "").trim() || "./update.json";
+  const manifestUrl =
+    String(new FormData(form).get("manifestUrl") || "").trim() || DEFAULT_UPDATE_MANIFEST_URL;
   await saveSetting("updateManifestUrl", manifestUrl);
   await logEvent("settings", "Saved update manifest URL.");
   await loadData();
@@ -946,7 +947,8 @@ async function handleUpdateSettings(form) {
 }
 
 async function checkUpdates() {
-  const manifestUrl = getSettingValue("updateManifestUrl", "./update.json") || "./update.json";
+  const manifestUrl =
+    getSettingValue("updateManifestUrl", DEFAULT_UPDATE_MANIFEST_URL) || DEFAULT_UPDATE_MANIFEST_URL;
   const result = await checkForUpdate(manifestUrl);
   if (!result.updateAvailable) {
     setToast(`Argus is current at ${result.current.versionName}.`);

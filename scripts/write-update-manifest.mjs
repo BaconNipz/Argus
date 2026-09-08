@@ -1,14 +1,14 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CURRENT_ANDROID_BUILD } from "../src/updater.js";
 
 const root = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
-const [apkPath, apkUrl] = process.argv.slice(2);
+const [apkPath, apkUrl, outputPath = "public/update.json"] = process.argv.slice(2);
 
 if (!apkPath || !apkUrl) {
-  console.error("Usage: node scripts/write-update-manifest.mjs <apk-path> <apk-url>");
+  console.error("Usage: node scripts/write-update-manifest.mjs <apk-path> <apk-url> [output-path]");
   process.exit(1);
 }
 
@@ -25,7 +25,9 @@ const manifest = {
   notes: [`Argus ${CURRENT_ANDROID_BUILD.versionName} APK update.`]
 };
 
-await writeFile(join(root, "public/update.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+const targetPath = isAbsolute(outputPath) ? outputPath : join(root, outputPath);
+
+await mkdir(dirname(targetPath), { recursive: true });
+await writeFile(targetPath, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`Wrote update manifest for ${CURRENT_ANDROID_BUILD.versionName}`);
 console.log(`sha256 ${sha256}`);
-

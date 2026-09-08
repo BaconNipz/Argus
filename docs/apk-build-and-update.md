@@ -39,6 +39,8 @@ The workflow at `.github/workflows/android-apk.yml` builds:
 
 - `argus-debug-apk` on every manual workflow run, push to `main`, or `argus-v*` tag.
 - `argus-release-apk` when signing secrets are configured.
+- A prerelease asset on pushes to `main` at `argus-v<versionName>`.
+- A generated `update.json` release asset with the APK URL and SHA-256 checksum.
 
 Required release signing secrets:
 
@@ -49,7 +51,7 @@ Required release signing secrets:
 | `ARGUS_KEY_ALIAS` | Key alias |
 | `ARGUS_KEY_PASSWORD` | Key password |
 
-The debug APK is installable, but signed release APKs are the proper path for repeat updates.
+The debug APK is installable and useful for v0.x testing. Signed release APKs are the proper path for repeat updates because Android requires all updates for the same installed app to use the same signing key.
 
 ## Update Manifest
 
@@ -67,11 +69,16 @@ Argus checks an update manifest shaped like:
 }
 ```
 
-After building and uploading an APK somewhere reachable by the phone, write the manifest with:
+Argus defaults to the latest release manifest:
 
-```bash
-node scripts/write-update-manifest.mjs native-android/app/build/outputs/apk/release/app-release.apk https://example.com/argus.apk
+```text
+https://github.com/BaconNipz/Argus/releases/latest/download/update.json
 ```
 
-Then publish `public/update.json` or paste its URL into Argus Settings. If a newer version is found, Argus queues an APK update action for confirmation.
+For manual update manifest generation, write the manifest with:
 
+```bash
+node scripts/write-update-manifest.mjs native-android/app/build/outputs/apk/release/app-release.apk https://example.com/argus.apk public/update.json
+```
+
+If a newer version is found, Argus queues an APK update action for confirmation.

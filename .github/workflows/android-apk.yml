@@ -8,6 +8,9 @@ on:
     tags:
       - "argus-v*"
 
+permissions:
+  contents: write
+
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -42,6 +45,22 @@ jobs:
       - name: Build debug APK
         run: gradle -p native-android assembleDebug
 
+      - name: Prepare debug APK update payload
+        id: debug_payload
+        shell: bash
+        run: |
+          version_name="$(node -p "JSON.parse(require('fs').readFileSync('public/update.json', 'utf8')).versionName")"
+          mkdir -p dist/android
+          apk_path="dist/android/Argus-v${version_name}-debug.apk"
+          cp native-android/app/build/outputs/apk/debug/app-debug.apk "$apk_path"
+          apk_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/argus-v${version_name}/Argus-v${version_name}-debug.apk"
+          node scripts/write-update-manifest.mjs "$apk_path" "$apk_url" dist/android/update.json
+          {
+            echo "version_name=${version_name}"
+            echo "apk_path=${apk_path}"
+            echo "manifest_path=dist/android/update.json"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Prepare release keystore
         if: env.HAS_RELEASE_SIGNING == 'true'
         run: |
@@ -61,7 +80,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: argus-debug-apk
-          path: native-android/app/build/outputs/apk/debug/*.apk
+          path: ${{ steps.debug_payload.outputs.apk_path }}
 
       - name: Upload signed release APK
         if: env.HAS_RELEASE_SIGNING == 'true'
@@ -70,3 +89,21 @@ jobs:
           name: argus-release-apk
           path: native-android/app/build/outputs/apk/release/*.apk
 
+      - name: Publish debug release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: argus-v${{ steps.debug_payload.outputs.version_name }}
+          name: Argus v${{ steps.debug_payload.outputs.version_name }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          prerelease: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          body: |
+            Argus Android-first local-first preview build.
+
+            This debug APK is installable for early testing. Add release signing secrets before relying on seamless Android updates across future builds.
+          files: |
+            ${{ steps.debug_payload.outputs.apk_path }}
+            ${{ steps.debug_payload.outputs.manifest_path }}

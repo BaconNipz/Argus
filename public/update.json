@@ -2,7 +2,7 @@
   "appId": "com.argus.localcore",
   "versionCode": 3,
   "versionName": "0.3.0",
-  "apkUrl": "",
+  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.3.0/Argus-v0.3.0-debug.apk",
   "sha256": "",
   "releaseDate": "2026-09-08",
   "notes": [
