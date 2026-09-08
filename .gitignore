@@ -1,0 +1,9 @@
+dist/
+node_modules/
+.gradle/
+build/
+native-android/.gradle/
+native-android/**/build/
+.DS_Store
+*.log
+*.zip

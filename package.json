@@ -1,0 +1,17 @@
+{
+  "name": "argus-local-core",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Argus v0.1 local-first Android-first assistant core.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/preview.mjs",
+    "sync:android": "node scripts/sync-native-assets.mjs",
+    "write:update": "node scripts/write-update-manifest.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

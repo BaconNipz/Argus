@@ -1,0 +1,72 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "argus-v*"
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      HAS_RELEASE_SIGNING: ${{ secrets.ARGUS_KEYSTORE_BASE64 != '' && secrets.ARGUS_KEYSTORE_PASSWORD != '' && secrets.ARGUS_KEY_ALIAS != '' && secrets.ARGUS_KEY_PASSWORD != '' }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Build Argus web core
+        run: node scripts/build.mjs
+
+      - name: Sync web core into Android assets
+        run: node scripts/sync-native-assets.mjs
+
+      - name: Build debug APK
+        run: gradle -p native-android assembleDebug
+
+      - name: Prepare release keystore
+        if: env.HAS_RELEASE_SIGNING == 'true'
+        run: |
+          mkdir -p native-android/keystore
+          printf '%s' "${{ secrets.ARGUS_KEYSTORE_BASE64 }}" | base64 --decode > native-android/keystore/argus-release.jks
+
+      - name: Build signed release APK
+        if: env.HAS_RELEASE_SIGNING == 'true'
+        env:
+          ARGUS_KEYSTORE_FILE: ${{ github.workspace }}/native-android/keystore/argus-release.jks
+          ARGUS_KEYSTORE_PASSWORD: ${{ secrets.ARGUS_KEYSTORE_PASSWORD }}
+          ARGUS_KEY_ALIAS: ${{ secrets.ARGUS_KEY_ALIAS }}
+          ARGUS_KEY_PASSWORD: ${{ secrets.ARGUS_KEY_PASSWORD }}
+        run: gradle -p native-android assembleRelease
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-debug-apk
+          path: native-android/app/build/outputs/apk/debug/*.apk
+
+      - name: Upload signed release APK
+        if: env.HAS_RELEASE_SIGNING == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-release-apk
+          path: native-android/app/build/outputs/apk/release/*.apk
+
