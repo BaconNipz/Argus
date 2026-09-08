@@ -39,7 +39,7 @@ The workflow at `.github/workflows/android-apk.yml` builds:
 
 - `argus-debug-apk` on every manual workflow run, push to `main`, or `argus-v*` tag.
 - `argus-release-apk` when signing secrets are configured.
-- A prerelease asset on pushes to `main` at `argus-v<versionName>`.
+- A release asset on pushes to `main` at `argus-v<versionName>`.
 - A generated `update.json` release asset with the APK URL and SHA-256 checksum.
 
 Required release signing secrets:

@@ -97,7 +97,7 @@ jobs:
           name: Argus v${{ steps.debug_payload.outputs.version_name }}
           target_commitish: ${{ github.sha }}
           make_latest: true
-          prerelease: true
+          prerelease: false
           overwrite_files: true
           fail_on_unmatched_files: true
           body: |
