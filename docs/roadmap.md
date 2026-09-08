@@ -27,20 +27,22 @@
 - Add in-app update checks.
 - Queue APK update install actions for confirmation.
 
-## v0.4 Assistant Memory
+## v0.4 Assistant Memory And OSINT Evidence
 
 - Add local full-text search.
-- Add embeddings through a local model adapter if practical on-device.
 - Add memory types: person, project, source, place, account and task.
 - Add review tools for stale, duplicate or sensitive memory.
+- Add source reliability fields.
+- Add screenshot/file attachment evidence records.
+- Add local-only investigation templates.
+- Add Android system file picker support for evidence attachment.
 
 ## v0.5 OSINT Workbench
 
-- Add source reliability fields.
 - Add evidence timeline.
-- Add screenshot/file attachment records.
 - Add link-analysis views.
-- Add local-only investigation templates.
+- Add richer source comparison and case review views.
+- Add embeddings through a local model adapter if practical on-device.
 
 ## v0.6 Voice And Command Layer
 

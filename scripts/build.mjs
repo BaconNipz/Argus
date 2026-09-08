@@ -1,4 +1,4 @@
-import { copyFile, mkdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,4 +28,5 @@ for (const [from, to] of files) {
   await copyFile(join(root, from), target);
 }
 
-console.log(`Built Argus v0.3 into ${dist}`);
+const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+console.log(`Built Argus v${pkg.version} into ${dist}`);

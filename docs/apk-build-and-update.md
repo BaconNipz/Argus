@@ -60,8 +60,8 @@ Argus checks an update manifest shaped like:
 ```json
 {
   "appId": "com.argus.localcore",
-  "versionCode": 3,
-  "versionName": "0.3.0",
+  "versionCode": 4,
+  "versionName": "0.4.0",
   "apkUrl": "https://example.com/argus.apk",
   "sha256": "APK_SHA256_HERE",
   "releaseDate": "2026-09-08",

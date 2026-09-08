@@ -447,6 +447,43 @@ a {
   margin-top: 0.25rem;
 }
 
+.checklist {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.35rem;
+  color: var(--muted);
+}
+
+.evidence-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.evidence-list h4 {
+  margin: 0.25rem 0 0;
+}
+
+.evidence-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #fbfdfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.evidence-item strong {
+  display: block;
+  word-break: break-word;
+}
+
+.evidence-item p {
+  margin: 0.25rem 0 0.5rem;
+}
+
 .recorder {
   display: flex;
   align-items: center;
@@ -547,8 +584,14 @@ audio {
   }
 
   .actions,
-  .recorder {
+  .recorder,
+  .evidence-item {
     align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .actions,
+  .recorder {
     flex-direction: column;
   }
 

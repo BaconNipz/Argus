@@ -1,14 +1,14 @@
 {
   "appId": "com.argus.localcore",
-  "versionCode": 3,
-  "versionName": "0.3.0",
-  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.3.0/Argus-v0.3.0-debug.apk",
+  "versionCode": 4,
+  "versionName": "0.4.0",
+  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.4.0/Argus-v0.4.0-debug.apk",
   "sha256": "",
   "releaseDate": "2026-09-08",
   "notes": [
-    "Local-first Argus core.",
-    "Android bridge scaffold.",
-    "Action queue and update channel groundwork.",
-    "APK build workflow and update manifest support."
+    "Local search across memory, cases, sources, evidence and voice notes.",
+    "Structured memory types and sensitivity review.",
+    "OSINT lead templates with source reliability labels.",
+    "Evidence attachments through the Android system file picker."
   ]
 }

@@ -1,15 +1,20 @@
-# Argus v0.3
+# Argus v0.4
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
-The current working build is an installable offline web app core, with the first native Android shell scaffold now prepared under `native-android/`. Argus v0.3 adds the APK build and update path so the project can produce installable Android builds once it is opened in Android Studio or run through CI.
+The current working build is an installable offline web app core, with the first native Android shell scaffold under `native-android/`. Argus v0.4 adds local search, structured memory review, OSINT lead templates, source reliability labels and evidence attachments.
 
 ## What v0.1 Does
 
 - Runs as a responsive mobile app from the `dist/` build.
 - Works offline after first load through a service worker.
 - Stores data locally in IndexedDB.
-- Captures memory notes, investigations, OSINT source links, tool entries and voice notes.
+- Captures memory notes, investigations, OSINT source links, evidence files, tool entries and voice notes.
+- Searches across local records from one phone-first Search view.
+- Creates OSINT lead cases for usernames, emails, domains, URLs and image notes.
+- Labels memory by type and sensitivity, then reviews stale, duplicate and sensitive notes.
+- Labels sources by type and reliability.
+- Attaches local evidence files through the Android system file picker in the native APK.
 - Queues draft Android/automation actions for confirmation before dispatch.
 - Exports and imports the whole local Argus dataset as JSON.
 - Includes a share-target route for later Android share-sheet intake.
@@ -55,3 +60,5 @@ Argus v0.1 is the base camp, not the mountain. Every feature should be added as 
 Argus v0.2 adds the first bridge boundary. Phone actions are drafted into a local queue first, then confirmed before any native dispatch happens.
 
 Argus v0.3 adds the APK/update path. Android updates require the same package name, a higher version code and the same signing key.
+
+Argus v0.4 adds local memory review and OSINT evidence handling while keeping cloud AI optional.

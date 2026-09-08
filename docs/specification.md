@@ -64,6 +64,19 @@ Argus v0.3 begins the installable/updateable APK path:
 - APK update actions routed through the local confirmation queue.
 - Documentation for version codes, package identity and signing-key continuity.
 
+## v0.4 Scope
+
+Argus v0.4 turns the foundation into a more useful local assistant and OSINT workbench:
+
+- Local search across memory, cases, sources, evidence, tools, voice notes and action drafts.
+- Structured memory types and sensitivity labels.
+- Memory review counts for stale, duplicate and sensitive notes.
+- OSINT lead builder for usernames, emails, domains, URLs and image-metadata notes.
+- Case templates with repeatable local checklists.
+- Source type and reliability labels.
+- Evidence records with local file attachments, notes and tags.
+- Android WebView file picker support for evidence attachment.
+
 ## v0.1 Non-Goals
 
 - No cloud AI integration.

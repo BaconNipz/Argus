@@ -1,4 +1,4 @@
-const CACHE_NAME = "argus-v0.3.0";
+const CACHE_NAME = "argus-v0.4.0";
 const APP_ASSETS = [
   "./",
   "./index.html",

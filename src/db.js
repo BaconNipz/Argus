@@ -1,8 +1,8 @@
 import { normalizeImportPayload } from "./argus-core.js";
 
 export const DB_NAME = "argus-local-core";
-export const DB_VERSION = 2;
-export const STORES = ["memory", "investigations", "tools", "voiceNotes", "actions", "settings", "events"];
+export const DB_VERSION = 3;
+export const STORES = ["memory", "investigations", "tools", "voiceNotes", "actions", "evidence", "settings", "events"];
 
 let dbPromise;
 
@@ -68,7 +68,11 @@ export async function exportArgusData() {
   };
 
   for (const store of STORES) {
-    data[store] = await listRecords(store);
+    const records = await listRecords(store);
+    data[store] = [];
+    for (const record of records) {
+      data[store].push(await serializeRecordForExport(record));
+    }
   }
 
   return data;
@@ -81,8 +85,43 @@ export async function importArgusData(payload) {
     await clearStore(store);
     for (const record of normalized[store]) {
       if (record && record.id) {
-        await putRecord(store, record);
+        await putRecord(store, await deserializeRecordForImport(record));
       }
     }
   }
+}
+
+async function blobToDataUrl(blob) {
+  if (!blob || typeof blob.arrayBuffer !== "function") return "";
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  const chunkSize = 8192;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
+  }
+  return `data:${blob.type || "application/octet-stream"};base64,${btoa(binary)}`;
+}
+
+async function dataUrlToBlob(dataUrl) {
+  const value = String(dataUrl || "");
+  if (!value.startsWith("data:")) return null;
+  return fetch(value).then((response) => response.blob());
+}
+
+async function serializeRecordForExport(record) {
+  const copy = { ...record };
+  if (copy.blob && typeof copy.blob.arrayBuffer === "function") {
+    copy.blobDataUrl = await blobToDataUrl(copy.blob);
+    delete copy.blob;
+  }
+  return copy;
+}
+
+async function deserializeRecordForImport(record) {
+  const copy = { ...record };
+  if (!copy.blob && copy.blobDataUrl) {
+    copy.blob = await dataUrlToBlob(copy.blobDataUrl);
+  }
+  delete copy.blobDataUrl;
+  return copy;
 }

@@ -10,21 +10,23 @@ Argus is an Android-first personal assistant, OSINT notebook and automation hub.
 | --- | --- | --- |
 | Interface | Fast phone UI for capture, review and command flow | Offline PWA |
 | Local Core | Data model, module registry, import/export, privacy defaults | Implemented |
-| Local Storage | Memory, investigations, tool records, voice notes and events | IndexedDB |
+| Local Storage | Memory, investigations, evidence, tool records, voice notes and events | IndexedDB |
 | Capability Modules | OSINT, memory, voice, automation and assistant tools | Stubbed and extensible |
 | Android Shell | Deep phone permissions and background services | Planned |
 | Local AI Runtime | Optional local LLM, transcription, embeddings and ranking | Planned |
 
 ## Data Stores
 
-Argus v0.1 uses these local object stores:
+Argus uses these local object stores:
 
 | Store | Purpose |
 | --- | --- |
 | `memory` | Notes, observations, copied snippets and user context |
 | `investigations` | OSINT cases with saved sources and working notes |
+| `evidence` | Local evidence files, notes, metadata and case attachments |
 | `tools` | Local registry of Argus capabilities and external/manual tools |
 | `voiceNotes` | Local audio captures and optional transcripts |
+| `actions` | Confirm-first drafts for native Android or manual actions |
 | `settings` | Device-local preferences |
 | `events` | Simple audit trail for local actions |
 
@@ -61,4 +63,3 @@ The web core should remain portable, but the final Argus app should gain an Andr
 3. Keep AI providers behind explicit adapters.
 4. Allow modules to be disabled or removed without corrupting the local database.
 5. Prefer one-off/local tools before recurring paid services.
-

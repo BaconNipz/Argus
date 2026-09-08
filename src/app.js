@@ -1,17 +1,28 @@
 import {
   ANDROID_BRIDGE_CAPABILITIES,
   ARGUS_VERSION,
+  INVESTIGATION_TEMPLATES,
+  MEMORY_SENSITIVITY,
+  MEMORY_TYPES,
   MODULES,
+  OSINT_TARGET_TYPES,
+  SOURCE_RELIABILITY,
+  SOURCE_TYPES,
+  buildOsintSearchLinks,
   classifyCapture,
   createAction,
+  createEvidence,
   createEvent,
   createInvestigation,
   createMemory,
   createSource,
   createTool,
   createVoiceNote,
+  detectOsintTargetType,
   getSeedTools,
   normalizeTags,
+  reviewMemoryRecords,
+  searchLocalRecords,
   summarizeStats
 } from "./argus-core.js";
 import { dispatchNativeAction, readNativeBridgeInfo, registerNativeInbox } from "./android-bridge.js";
@@ -29,6 +40,7 @@ import {
 const app = document.querySelector("#app");
 const navItems = [
   { id: "dashboard", label: "Dashboard" },
+  { id: "search", label: "Search" },
   { id: "memory", label: "Memory" },
   { id: "investigations", label: "Investigations" },
   { id: "tools", label: "Tools" },
@@ -45,9 +57,11 @@ const state = {
   tools: [],
   voiceNotes: [],
   actions: [],
+  evidence: [],
   settings: [],
   events: [],
   memoryQuery: "",
+  searchQuery: "",
   toast: "",
   recording: null,
   sharedDraft: null,
@@ -106,6 +120,7 @@ async function loadData() {
   state.tools = await listRecords("tools");
   state.voiceNotes = await listRecords("voiceNotes");
   state.actions = await listRecords("actions");
+  state.evidence = await listRecords("evidence");
   state.settings = await listRecords("settings");
   state.events = await listRecords("events");
 }
@@ -143,6 +158,7 @@ async function handleSharedLaunch() {
 }
 
 function statCount(view) {
+  if (view === "search") return "";
   if (view === "memory") return state.memory.length;
   if (view === "investigations") return state.investigations.length;
   if (view === "tools") return state.tools.length;
@@ -237,6 +253,7 @@ function renderDashboard() {
         ["Memory", stats.memories],
         ["Cases", stats.investigations],
         ["Sources", stats.sources],
+        ["Evidence", stats.evidence],
         ["Voice", stats.voiceNotes],
         ["Actions", stats.pendingActions]
       ]
@@ -265,6 +282,54 @@ function renderDashboard() {
   `;
 }
 
+function renderSearch() {
+  const query = state.searchQuery.trim();
+  const results = query ? searchLocalRecords(state, query) : [];
+  return `
+    <section class="band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Local Search</p>
+          <h1>Find anything Argus knows</h1>
+          <p>Search memory, cases, sources, evidence, tools, voice notes and queued actions on this device.</p>
+        </div>
+      </div>
+      <form class="quick-capture" data-form="global-search">
+        <label class="field">
+          <span>Search Argus</span>
+          <input class="input" name="query" value="${escapeHtml(state.searchQuery)}" placeholder="username, domain, case title, note, file name">
+        </label>
+        <button class="button" type="submit">Search</button>
+      </form>
+    </section>
+    <div class="list-grid">
+      ${
+        query
+          ? results.length
+            ? results.map(renderSearchResult).join("")
+            : `<p class="empty">No local matches for ${escapeHtml(query)}.</p>`
+          : `<p class="empty">Enter a search term to look across Argus local data.</p>`
+      }
+    </div>
+  `;
+}
+
+function renderSearchResult(result) {
+  return `
+    <article class="card item-card">
+      <header>
+        <div>
+          <h3>${escapeHtml(result.title)}</h3>
+          <p>${escapeHtml(result.kind)} · ${escapeHtml(formatDate(result.createdAt))}</p>
+        </div>
+        <span class="status ready">${escapeHtml(result.kind)}</span>
+      </header>
+      <p>${escapeHtml(result.detail)}</p>
+      ${result.meta ? `<div class="tag-row">${String(result.meta).split(/\s+/).filter(Boolean).slice(0, 8).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>` : ""}
+    </article>
+  `;
+}
+
 function renderModuleCard(module) {
   return `
     <article class="card module-card">
@@ -288,9 +353,10 @@ function renderMemory() {
   const query = state.memoryQuery.trim().toLowerCase();
   const filtered = query
     ? state.memory.filter((item) =>
-        [item.text, ...(item.tags || [])].join(" ").toLowerCase().includes(query)
+        [item.text, item.type, item.sensitivity, ...(item.tags || [])].join(" ").toLowerCase().includes(query)
       )
     : state.memory;
+  const review = reviewMemoryRecords(state.memory);
 
   return `
     <section class="band">
@@ -308,9 +374,17 @@ function renderMemory() {
         </label>
         <div class="field-grid">
           <label class="field">
+            <span>Type</span>
+            <select class="select" name="type">
+              ${MEMORY_TYPES.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
             <span>Tags</span>
             <input class="input" name="tags" placeholder="project, person, idea">
           </label>
+        </div>
+        <div class="field-grid">
           <label class="field">
             <span>Priority</span>
             <select class="select" name="priority">
@@ -319,9 +393,31 @@ function renderMemory() {
               <option value="low">Low</option>
             </select>
           </label>
+          <label class="field">
+            <span>Sensitivity</span>
+            <select class="select" name="sensitivity">
+              ${MEMORY_SENSITIVITY.map((level) => `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`).join("")}
+            </select>
+          </label>
         </div>
         <button class="button" type="submit">Save Memory</button>
       </form>
+    </section>
+    <section class="stats-grid" aria-label="Argus memory review">
+      ${[
+        ["Stale", review.stale.length],
+        ["Duplicates", review.duplicates.length],
+        ["Sensitive", review.sensitive.length]
+      ]
+        .map(
+          ([label, value]) => `
+            <div class="card stat">
+              <strong>${value}</strong>
+              <span>${label}</span>
+            </div>
+          `
+        )
+        .join("")}
     </section>
     <section class="band">
       <div class="section-head">
@@ -349,13 +445,14 @@ function renderMemoryCard(item) {
       <header>
         <div>
           <h3>${escapeHtml(formatDate(item.createdAt))}</h3>
-          <p>${escapeHtml(item.priority || "normal")} priority</p>
+          <p>${escapeHtml(item.type || "note")} · ${escapeHtml(item.priority || "normal")} priority</p>
         </div>
         <button class="button quiet" type="button" data-action="delete-memory" data-id="${escapeHtml(item.id)}">Delete</button>
       </header>
       <p>${escapeHtml(item.text)}</p>
       <div class="tag-row">
         ${(item.tags || []).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("") || `<span class="tag">untagged</span>`}
+        <span class="tag">${escapeHtml(item.sensitivity || "normal")}</span>
       </div>
     </article>
   `;
@@ -363,6 +460,7 @@ function renderMemoryCard(item) {
 
 function renderInvestigations() {
   return `
+    ${renderOsintLeadBuilder()}
     <section class="band">
       <div class="section-head">
         <div>
@@ -386,6 +484,18 @@ function renderInvestigations() {
             </select>
           </label>
         </div>
+        <div class="field-grid">
+          <label class="field">
+            <span>Target</span>
+            <input class="input" name="target" placeholder="username, email, domain, URL or image note">
+          </label>
+          <label class="field">
+            <span>Template</span>
+            <select class="select" name="templateId">
+              ${INVESTIGATION_TEMPLATES.map((template) => `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
         <label class="field">
           <span>Working note</span>
           <textarea class="textarea" name="summary" placeholder="What is this case trying to answer?"></textarea>
@@ -399,20 +509,88 @@ function renderInvestigations() {
   `;
 }
 
+function renderOsintLeadBuilder() {
+  return `
+    <section class="band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">OSINT Start</p>
+          <h1>Start a phone-first lead</h1>
+          <p>Create a local case with a checklist and manual search links for public sources.</p>
+        </div>
+      </div>
+      <form class="quick-capture" data-form="osint-lead">
+        <div class="field-grid">
+          <label class="field">
+            <span>Target</span>
+            <input class="input" name="target" placeholder="@username, person@example.com, example.com, image note">
+          </label>
+          <label class="field">
+            <span>Target type</span>
+            <select class="select" name="targetType">
+              ${OSINT_TARGET_TYPES.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <button class="button" type="submit">Create OSINT Case</button>
+      </form>
+    </section>
+  `;
+}
+
 function renderInvestigationCard(item) {
+  const evidence = evidenceForCase(item.id);
   return `
     <article class="card item-card">
       <header>
         <div>
           <h3>${escapeHtml(item.title)}</h3>
-          <p>${escapeHtml(item.status)} · ${escapeHtml(formatDate(item.createdAt))}</p>
+          <p>${escapeHtml(item.status)} · ${escapeHtml(item.targetType || "general")} · ${escapeHtml(formatDate(item.createdAt))}</p>
         </div>
         <button class="button quiet" type="button" data-action="delete-investigation" data-id="${escapeHtml(item.id)}">Delete</button>
       </header>
+      ${
+        item.target
+          ? `<div class="tag-row">
+              <span class="tag">target: ${escapeHtml(item.target)}</span>
+              <span class="tag">${escapeHtml(item.templateId || "blank")}</span>
+            </div>`
+          : ""
+      }
       ${item.summary ? `<p>${escapeHtml(item.summary)}</p>` : ""}
+      ${renderChecklist(item.checklist)}
+      <div class="actions">
+        <button class="button secondary" type="button" data-action="add-osint-links" data-id="${escapeHtml(item.id)}">Add Search Links</button>
+      </div>
       <ul class="source-list">
         ${(item.sources || []).map(renderSourceItem).join("") || `<li><p>No sources attached yet.</p></li>`}
       </ul>
+      <div class="evidence-list">
+        <h4>Evidence</h4>
+        ${evidence.length ? evidence.map(renderEvidenceItem).join("") : `<p class="empty">No evidence files or notes attached yet.</p>`}
+      </div>
+      <form class="quick-capture" data-form="evidence">
+        <input type="hidden" name="investigationId" value="${escapeHtml(item.id)}">
+        <div class="field-grid">
+          <label class="field">
+            <span>Evidence file</span>
+            <input class="input" type="file" name="evidenceFile" accept="image/*,audio/*,video/*,text/*,application/pdf">
+          </label>
+          <label class="field">
+            <span>Title</span>
+            <input class="input" name="title" placeholder="Screenshot, document, note">
+          </label>
+        </div>
+        <label class="field">
+          <span>Evidence note</span>
+          <input class="input" name="note" placeholder="What this evidence shows">
+        </label>
+        <label class="field">
+          <span>Tags</span>
+          <input class="input" name="tags" placeholder="screenshot, original, metadata">
+        </label>
+        <button class="button secondary" type="submit">Attach Evidence</button>
+      </form>
       <form class="quick-capture" data-form="source">
         <input type="hidden" name="investigationId" value="${escapeHtml(item.id)}">
         <div class="field-grid">
@@ -425,6 +603,20 @@ function renderInvestigationCard(item) {
             <input class="input" name="title" placeholder="Optional source title">
           </label>
         </div>
+        <div class="field-grid">
+          <label class="field">
+            <span>Source type</span>
+            <select class="select" name="type">
+              ${SOURCE_TYPES.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Reliability</span>
+            <select class="select" name="reliability">
+              ${SOURCE_RELIABILITY.map((level) => `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
         <label class="field">
           <span>Note</span>
           <input class="input" name="note" placeholder="Why this source matters">
@@ -435,6 +627,49 @@ function renderInvestigationCard(item) {
   `;
 }
 
+function evidenceForCase(investigationId) {
+  return state.evidence.filter((item) => item.investigationId === investigationId);
+}
+
+function renderChecklist(checklist = []) {
+  if (!Array.isArray(checklist) || checklist.length === 0) return "";
+  return `
+    <ol class="checklist">
+      ${checklist.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+    </ol>
+  `;
+}
+
+function renderEvidenceItem(item) {
+  const fileUrl = item.blob ? URL.createObjectURL(item.blob) : "";
+  const fileLabel = item.fileName || item.title || "evidence";
+  return `
+    <article class="evidence-item">
+      <div>
+        <strong>${escapeHtml(item.title || fileLabel)}</strong>
+        <p>${escapeHtml(item.note || item.fileName || "Evidence record")}</p>
+        <div class="tag-row">
+          <span class="tag">${escapeHtml(item.mimeType || "note")}</span>
+          <span class="tag">${escapeHtml(formatFileSize(item.fileSize))}</span>
+          ${(item.tags || []).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}
+        </div>
+      </div>
+      <div class="actions">
+        ${fileUrl ? `<a class="button secondary" href="${escapeHtml(fileUrl)}" download="${escapeHtml(fileLabel)}">Open</a>` : ""}
+        <button class="button quiet" type="button" data-action="delete-evidence" data-id="${escapeHtml(item.id)}">Delete</button>
+      </div>
+    </article>
+  `;
+}
+
+function formatFileSize(bytes) {
+  const size = Number(bytes || 0);
+  if (!size) return "note";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function renderSourceItem(source) {
   const href = safeLink(source.url);
   return `
@@ -443,7 +678,9 @@ function renderSourceItem(source) {
       ${source.note ? `<p>${escapeHtml(source.note)}</p>` : ""}
       <div class="tag-row">
         <span class="tag">${escapeHtml(source.type || "link")}</span>
+        <span class="tag">${escapeHtml(source.reliability || "unknown")}</span>
         <span class="tag">${escapeHtml(formatDate(source.createdAt))}</span>
+        ${(source.tags || []).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}
       </div>
     </li>
   `;
@@ -772,6 +1009,7 @@ async function saveSetting(id, value) {
 function render() {
   const views = {
     dashboard: renderDashboard,
+    search: renderSearch,
     memory: renderMemory,
     investigations: renderInvestigations,
     tools: renderTools,
@@ -839,11 +1077,13 @@ async function handleMemory(form) {
   const formData = new FormData(form);
   await putRecord(
     "memory",
-    createMemory({
-      text: formData.get("text"),
-      tags: formData.get("tags"),
-      priority: formData.get("priority")
-    })
+      createMemory({
+        text: formData.get("text"),
+        tags: formData.get("tags"),
+        priority: formData.get("priority"),
+        type: formData.get("type"),
+        sensitivity: formData.get("sensitivity")
+      })
   );
   await logEvent("memory", "Saved memory note.");
   await loadData();
@@ -857,12 +1097,45 @@ async function handleInvestigation(form) {
     createInvestigation({
       title: formData.get("title"),
       summary: formData.get("summary"),
-      status: formData.get("status")
+      status: formData.get("status"),
+      target: formData.get("target"),
+      templateId: formData.get("templateId")
     })
   );
   await logEvent("investigation", "Created investigation.");
   await loadData();
   setToast("Case created.");
+}
+
+async function handleOsintLead(form) {
+  const formData = new FormData(form);
+  const target = String(formData.get("target") || "").trim();
+  if (!target) return;
+
+  const targetType = detectOsintTargetType(target);
+  const requestedType = String(formData.get("targetType") || "auto");
+  const type = requestedType === "auto" ? targetType : requestedType;
+  const templateId = INVESTIGATION_TEMPLATES.some((template) => template.id === type) ? type : "blank";
+  const investigation = createInvestigation({
+    title: `OSINT: ${target}`,
+    target,
+    targetType: type,
+    templateId,
+    summary: ""
+  });
+
+  investigation.sources = buildOsintSearchLinks(target, type).map((source) =>
+    createSource({
+      ...source,
+      tags: source.tags || ["search-link", type]
+    })
+  );
+
+  await putRecord("investigations", investigation);
+  await logEvent("investigation", `Created OSINT lead for ${target}.`);
+  await loadData();
+  state.activeView = "investigations";
+  setToast("OSINT case created locally.");
 }
 
 async function handleSource(form) {
@@ -874,7 +1147,9 @@ async function handleSource(form) {
     createSource({
       url: formData.get("url"),
       title: formData.get("title"),
-      note: formData.get("note")
+      note: formData.get("note"),
+      type: formData.get("type"),
+      reliability: formData.get("reliability")
     }),
     ...(investigation.sources || [])
   ];
@@ -883,6 +1158,53 @@ async function handleSource(form) {
   await logEvent("source", `Attached source to ${investigation.title}.`);
   await loadData();
   setToast("Source attached.");
+}
+
+async function handleEvidence(form) {
+  const formData = new FormData(form);
+  const file = form.elements.evidenceFile.files?.[0] || null;
+  const evidence = createEvidence({
+    investigationId: formData.get("investigationId"),
+    title: formData.get("title"),
+    note: formData.get("note"),
+    fileName: file?.name,
+    mimeType: file?.type,
+    fileSize: file?.size,
+    blob: file,
+    tags: normalizeTags(formData.get("tags"))
+  });
+
+  await putRecord("evidence", evidence);
+  await logEvent("evidence", `Attached evidence to ${evidence.investigationId}.`);
+  await loadData();
+  setToast("Evidence attached locally.");
+}
+
+async function addOsintLinks(id) {
+  const investigation = state.investigations.find((item) => item.id === id);
+  if (!investigation) return;
+
+  const target = investigation.target || investigation.title.replace(/^OSINT:\s*/i, "");
+  const sourceLinks = buildOsintSearchLinks(target, investigation.targetType || "auto").map((source) =>
+    createSource(source)
+  );
+  const existingUrls = new Set((investigation.sources || []).map((source) => source.url));
+  const newSources = sourceLinks.filter((source) => !existingUrls.has(source.url));
+  investigation.sources = [...newSources, ...(investigation.sources || [])];
+  investigation.updatedAt = new Date().toISOString();
+  await putRecord("investigations", investigation);
+  await logEvent("source", `Added ${newSources.length} OSINT search links to ${investigation.title}.`);
+  await loadData();
+  setToast(newSources.length ? "Search links added." : "Search links already attached.");
+}
+
+async function deleteInvestigation(id) {
+  await deleteRecord("investigations", id);
+  for (const item of state.evidence.filter((evidence) => evidence.investigationId === id)) {
+    await deleteRecord("evidence", item.id);
+  }
+  await loadData();
+  setToast("Case and evidence deleted.");
 }
 
 async function handleTool(form) {
@@ -1098,9 +1420,15 @@ app.addEventListener("click", async (event) => {
     setToast("Memory deleted.");
   }
   if (action === "delete-investigation") {
-    await deleteRecord("investigations", id);
+    await deleteInvestigation(id);
+  }
+  if (action === "add-osint-links") {
+    await addOsintLinks(id);
+  }
+  if (action === "delete-evidence") {
+    await deleteRecord("evidence", id);
     await loadData();
-    setToast("Case deleted.");
+    setToast("Evidence deleted.");
   }
   if (action === "delete-tool") {
     await deleteRecord("tools", id);
@@ -1154,13 +1482,19 @@ app.addEventListener("submit", async (event) => {
   try {
     const formType = form.dataset.form;
     if (formType === "quick-capture") await handleQuickCapture(form);
+    if (formType === "global-search") {
+      state.searchQuery = new FormData(form).get("query") || "";
+      render();
+    }
     if (formType === "memory") await handleMemory(form);
     if (formType === "memory-search") {
       state.memoryQuery = new FormData(form).get("query") || "";
       render();
     }
     if (formType === "investigation") await handleInvestigation(form);
+    if (formType === "osint-lead") await handleOsintLead(form);
     if (formType === "source") await handleSource(form);
+    if (formType === "evidence") await handleEvidence(form);
     if (formType === "tool") await handleTool(form);
     if (formType === "action") await handleAction(form);
     if (formType === "update-settings") await handleUpdateSettings(form);
