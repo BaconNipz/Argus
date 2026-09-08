@@ -78,8 +78,8 @@ Argus checks an update manifest shaped like:
 ```json
 {
   "appId": "com.argus.localcore",
-  "versionCode": 5,
-  "versionName": "0.4.1",
+  "versionCode": 6,
+  "versionName": "0.5.0",
   "apkUrl": "https://example.com/argus.apk",
   "sha256": "APK_SHA256_HERE",
   "releaseDate": "2026-09-08",
@@ -96,7 +96,7 @@ https://github.com/BaconNipz/Argus/releases/latest/download/update.json
 For manual update manifest generation, write the manifest with:
 
 ```bash
-node scripts/write-update-manifest.mjs native-android/app/build/outputs/apk/preview/app-preview.apk https://example.com/argus.apk public/update.json
+node scripts/write-update-manifest.mjs native-android/app/build/outputs/apk/release/app-release.apk https://example.com/argus.apk public/update.json
 ```
 
 If a newer version is found, Argus queues an APK update action for confirmation.

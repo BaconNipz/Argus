@@ -6,13 +6,13 @@ Argus is an Android-first personal assistant, OSINT notebook and automation hub.
 
 ## Core Layers
 
-| Layer | Responsibility | v0.1 Status |
+| Layer | Responsibility | Current Status |
 | --- | --- | --- |
-| Interface | Fast phone UI for capture, review and command flow | Offline PWA |
+| Interface | Fast phone UI for capture, review and command flow | Offline PWA plus OSINT Workbench |
 | Local Core | Data model, module registry, import/export, privacy defaults | Implemented |
 | Local Storage | Memory, investigations, evidence, tool records, voice notes and events | IndexedDB |
-| Capability Modules | OSINT, memory, voice, automation and assistant tools | Stubbed and extensible |
-| Android Shell | Deep phone permissions and background services | Planned |
+| Capability Modules | OSINT, memory, voice, automation and assistant tools | Ready, stubbed and planned modules |
+| Android Shell | Deep phone permissions and background services | WebView scaffold |
 | Local AI Runtime | Optional local LLM, transcription, embeddings and ranking | Planned |
 
 ## Data Stores

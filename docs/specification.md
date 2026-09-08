@@ -86,6 +86,17 @@ Argus v0.4.1 stabilises the early Android release update path:
 - Keep debug fallback APKs available only for early testing.
 - Preserve private release signing behind GitHub Actions secrets.
 
+## v0.5 Scope
+
+Argus v0.5 adds the first local OSINT workbench layer:
+
+- Case review summaries for sources, evidence and support gaps.
+- Evidence timeline across case creation, source capture and evidence records.
+- Source relationship labels such as reference, same-identity, corroborates and contradicts.
+- Optional observed timestamps for sources and evidence.
+- Local link analysis between cases, targets, sources, domains, entities and evidence.
+- No automated scraping or cloud AI requirement.
+
 ## v0.1 Non-Goals
 
 - No cloud AI integration.

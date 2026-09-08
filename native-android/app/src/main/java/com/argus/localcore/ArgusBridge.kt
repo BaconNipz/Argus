@@ -11,7 +11,7 @@ class ArgusBridge(private val activity: Activity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.4.1-native-scaffold")
+            .put("version", "0.5.0-native-scaffold")
             .put("host", "android")
             .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker")))
             .put("message", "Native Android shell scaffold is attached.")

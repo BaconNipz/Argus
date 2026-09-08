@@ -43,6 +43,8 @@
 - Add evidence timeline.
 - Add link-analysis views.
 - Add richer source comparison and case review views.
+- Add source relationship labels and observed timestamps.
+- Keep graph/review logic local and exportable.
 - Add embeddings through a local model adapter if practical on-device.
 
 ## v0.6 Voice And Command Layer

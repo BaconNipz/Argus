@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   MODULES,
+  buildCaseReview,
+  buildEvidenceTimeline,
+  buildLinkAnalysis,
   buildOsintSearchLinks,
   classifyCapture,
   createAction,
@@ -43,6 +46,27 @@ test("creates required local-first records", () => {
   assert.match(tool.id, /^tool-/);
   assert.match(action.id, /^act-/);
   assert.equal(action.requiresConfirmation, true);
+});
+
+test("records source relationships and evidence observation times", () => {
+  const source = createSource({
+    url: "https://example.com/profile",
+    relationship: "same-identity",
+    relatedEntity: "@example",
+    observedAt: "2026-09-08T01:00:00.000Z"
+  });
+  const evidence = createEvidence({
+    investigationId: "case-1",
+    title: "Profile screenshot",
+    sourceId: source.id,
+    relatedEntity: "@example",
+    observedAt: "2026-09-08T02:00:00.000Z"
+  });
+
+  assert.equal(source.relationship, "same-identity");
+  assert.equal(source.relatedEntity, "@example");
+  assert.equal(evidence.sourceId, source.id);
+  assert.equal(evidence.observedAt, "2026-09-08T02:00:00.000Z");
 });
 
 test("detects common OSINT target types", () => {
@@ -96,6 +120,43 @@ test("searches across local records", () => {
 
   assert.equal(results[0].kind, "evidence");
   assert.equal(results[0].title, "Passport screenshot");
+});
+
+test("builds case review, timeline and link analysis locally", () => {
+  const investigation = createInvestigation({
+    title: "Example identity case",
+    target: "@example",
+    summary: "Check whether the account links are the same person.",
+    templateId: "username",
+    createdAt: "2026-09-08T00:00:00.000Z"
+  });
+  const source = createSource({
+    url: "https://example.com/profile",
+    title: "Profile page",
+    reliability: "corroborated",
+    relationship: "same-identity",
+    relatedEntity: "@example",
+    createdAt: "2026-09-08T01:00:00.000Z"
+  });
+  investigation.sources = [source];
+  const evidence = createEvidence({
+    investigationId: investigation.id,
+    title: "Profile screenshot",
+    sourceId: source.id,
+    fileName: "profile.png",
+    relatedEntity: "@example",
+    createdAt: "2026-09-08T02:00:00.000Z"
+  });
+
+  const review = buildCaseReview(investigation, [evidence]);
+  const timeline = buildEvidenceTimeline({ investigations: [investigation], evidence: [evidence] });
+  const graph = buildLinkAnalysis({ investigations: [investigation], evidence: [evidence] });
+
+  assert.equal(review.reviewState, "well_supported");
+  assert.equal(review.strongSourceCount, 1);
+  assert.equal(timeline[0].kind, "evidence");
+  assert.ok(graph.nodes.some((node) => node.kind === "domain" && node.label === "example.com"));
+  assert.ok(graph.edges.some((edge) => edge.label === "same-identity"));
 });
 
 test("reviews memory for stale, duplicate and sensitive items", () => {
