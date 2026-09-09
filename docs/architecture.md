@@ -8,7 +8,7 @@ Argus is an Android-first personal assistant, OSINT notebook and automation hub.
 
 | Layer | Responsibility | Current Status |
 | --- | --- | --- |
-| Interface | Fast phone UI for capture, review and command flow | Offline PWA plus OSINT Workbench |
+| Interface | Fast phone UI for capture, review and command flow | Offline PWA plus OSINT Workbench and Command screen |
 | Local Core | Data model, module registry, import/export, privacy defaults | Implemented |
 | Local Storage | Memory, investigations, evidence, tool records, voice notes and events | IndexedDB |
 | Capability Modules | OSINT, memory, voice, automation and assistant tools | Ready, stubbed and planned modules |
@@ -29,6 +29,12 @@ Argus uses these local object stores:
 | `actions` | Confirm-first drafts for native Android or manual actions |
 | `settings` | Device-local preferences |
 | `events` | Simple audit trail for local actions |
+
+## Command Layer
+
+The first command layer is a deterministic local parser. It recognises simple commands for memory capture, case creation, source saving, local search and safe action drafts. It does not call cloud AI, does not infer hidden intent and does not dispatch Android actions directly.
+
+External actions such as opening URLs are converted into records in the `actions` store. The user must approve and dispatch them through the Android bridge flow.
 
 ## Module Boundary
 

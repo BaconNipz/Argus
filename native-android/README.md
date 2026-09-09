@@ -47,6 +47,7 @@ The scaffold now includes:
 - A conservative `open_url` dispatch example.
 - Android file chooser support for local evidence attachments.
 - Signed release build support through private signing settings.
+- The bundled v0.6 command layer, with URL-opening routed through the confirm-first action queue.
 
 Before opening the native project, run:
 

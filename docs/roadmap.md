@@ -53,6 +53,8 @@
 - Add offline speech-to-text adapter.
 - Add command parser with confirm-before-action safety.
 - Add spoken responses using Android text-to-speech.
+- Keep the first command parser deterministic and local.
+- Route unclear or external commands through safe no-op or draft-action paths.
 
 ## v0.7 Phone Automation
 

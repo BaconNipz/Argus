@@ -1,15 +1,15 @@
 {
   "appId": "com.argus.localcore",
-  "versionCode": 6,
-  "versionName": "0.5.0",
-  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.5.0/Argus-v0.5.0-release.apk",
+  "versionCode": 7,
+  "versionName": "0.6.0",
+  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.6.0/Argus-v0.6.0-release.apk",
   "sha256": "",
   "releaseDate": "2026-09-08",
   "notes": [
-    "Adds the local OSINT Workbench view.",
-    "Builds evidence timelines from saved cases, sources and evidence records.",
-    "Adds local link analysis for cases, targets, sources, domains and evidence.",
-    "Adds source relationship labels and observed timestamps for better case review.",
-    "Keeps signed release APK publishing ready for private signing secrets."
+    "Adds the local Command screen.",
+    "Parses simple commands for memory, cases, sources, search and action drafts.",
+    "Queues URL-opening and reminder commands for confirmation before Android dispatch.",
+    "Adds optional speech output for command replies when browser or Android TTS is available.",
+    "Keeps cloud AI optional and out of the command foundation."
   ]
 }

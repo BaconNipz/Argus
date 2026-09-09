@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   MODULES,
+  COMMAND_EXAMPLES,
   buildCaseReview,
   buildEvidenceTimeline,
   buildLinkAnalysis,
@@ -17,6 +18,7 @@ import {
   detectFirstUrl,
   normalizeImportPayload,
   normalizeTags,
+  parseArgusCommand,
   reviewMemoryRecords,
   searchLocalRecords,
   summarizeStats
@@ -46,6 +48,36 @@ test("creates required local-first records", () => {
   assert.match(tool.id, /^tool-/);
   assert.match(action.id, /^act-/);
   assert.equal(action.requiresConfirmation, true);
+});
+
+test("parses local commands into safe routes", () => {
+  const memory = parseArgusCommand("Argus remember that the app must work offline");
+  const investigation = parseArgusCommand("start case @example_user");
+  const source = parseArgusCommand("save source https://example.com/profile");
+  const search = parseArgusCommand("search example.com");
+  const openUrl = parseArgusCommand("open https://example.com");
+  const reminder = parseArgusCommand("remind me to export an Argus backup");
+  const unknown = parseArgusCommand("make sense of this vague thing");
+
+  assert.equal(memory.intent, "memory");
+  assert.equal(memory.targetView, "memory");
+  assert.equal(investigation.intent, "investigation");
+  assert.equal(investigation.payload.targetType, "username");
+  assert.equal(source.intent, "source");
+  assert.equal(source.payload.url, "https://example.com/profile");
+  assert.equal(search.intent, "search");
+  assert.equal(search.payload.query, "example.com");
+  assert.equal(openUrl.intent, "open_url");
+  assert.equal(openUrl.action.capability, "open_url");
+  assert.equal(openUrl.safety, "queued for confirmation");
+  assert.equal(reminder.intent, "local_reminder");
+  assert.equal(reminder.action.payload.text, "export an Argus backup");
+  assert.equal(unknown.intent, "unknown");
+});
+
+test("keeps command examples available for the UI", () => {
+  assert.ok(COMMAND_EXAMPLES.length >= 4);
+  assert.ok(COMMAND_EXAMPLES.some((example) => example.startsWith("remember")));
 });
 
 test("records source relationships and evidence observation times", () => {

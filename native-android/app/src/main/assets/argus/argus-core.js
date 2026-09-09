@@ -1,4 +1,4 @@
-export const ARGUS_VERSION = "0.5.0";
+export const ARGUS_VERSION = "0.6.0";
 
 export const MEMORY_TYPES = ["note", "person", "project", "source", "place", "account", "task"];
 export const MEMORY_SENSITIVITY = ["normal", "sensitive", "private"];
@@ -14,6 +14,23 @@ export const SOURCE_RELATIONSHIPS = [
   "context"
 ];
 export const OSINT_TARGET_TYPES = ["auto", "username", "email", "domain", "url", "image", "general"];
+export const COMMAND_INTENTS = [
+  "memory",
+  "investigation",
+  "source",
+  "search",
+  "open_url",
+  "local_reminder",
+  "unknown"
+];
+export const COMMAND_EXAMPLES = [
+  "remember that Argus should stay local-first",
+  "start case @example_user",
+  "save source https://example.com/profile",
+  "search example.com",
+  "open https://example.com after I approve it",
+  "remind me to export an Argus backup"
+];
 
 export const INVESTIGATION_TEMPLATES = [
   {
@@ -152,6 +169,15 @@ export const MODULES = [
     description: "Create username, email, domain and image-metadata case templates."
   },
   {
+    id: "command-router",
+    name: "Command Router",
+    category: "assistant",
+    status: "ready",
+    localFirst: true,
+    requiresAndroidBridge: false,
+    description: "Parse simple local commands into memory, search, cases, sources or confirmed action drafts."
+  },
+  {
     id: "action-queue",
     name: "Action Queue",
     category: "automation",
@@ -247,6 +273,13 @@ export const ANDROID_BRIDGE_CAPABILITIES = [
     sensitivity: "normal",
     status: "planned",
     description: "Transcribe a local audio note using an on-device model."
+  },
+  {
+    id: "text_to_speech",
+    name: "Text To Speech",
+    sensitivity: "low",
+    status: "stub",
+    description: "Read Argus responses aloud through Android or browser speech output."
   }
 ];
 
@@ -316,6 +349,164 @@ export function classifyCapture(text) {
   }
 
   return { type: "memory" };
+}
+
+function stripCommandWakeWord(text) {
+  return String(text || "")
+    .trim()
+    .replace(/^argus[:,]?\s*/i, "")
+    .trim();
+}
+
+function commandResult({
+  intent,
+  title,
+  response,
+  payload = {},
+  action = null,
+  targetView = "command",
+  confidence = "medium",
+  safety = "local"
+}) {
+  return {
+    intent: normalizeChoice(intent, COMMAND_INTENTS, "unknown"),
+    title,
+    response,
+    payload,
+    action,
+    targetView,
+    confidence,
+    safety
+  };
+}
+
+export function parseArgusCommand(input) {
+  const original = String(input || "").trim();
+  const text = stripCommandWakeWord(original);
+  if (!text) {
+    return commandResult({
+      intent: "unknown",
+      title: "Empty command",
+      response: "Type or dictate a short command for Argus to route.",
+      confidence: "low",
+      safety: "no action"
+    });
+  }
+
+  const rememberMatch = text.match(/^(?:remember|memorise|memorize|note)\s+(?:that\s+)?(.+)/i);
+  if (rememberMatch?.[1]) {
+    const memoryText = rememberMatch[1].trim();
+    return commandResult({
+      intent: "memory",
+      title: "Save memory",
+      response: "I saved that as a local memory note.",
+      payload: { text: memoryText, tags: ["command"], source: "command" },
+      targetView: "memory",
+      confidence: "high",
+      safety: "local record"
+    });
+  }
+
+  const caseMatch =
+    text.match(/^(?:start|create|open)\s+(?:a\s+)?(?:case|investigation)\s*(?:for|about|on)?\s+(.+)/i) ||
+    text.match(/^(?:investigate|research)\s+(.+)/i);
+  if (caseMatch?.[1]) {
+    const target = caseMatch[1].trim();
+    const targetType = detectOsintTargetType(target);
+    return commandResult({
+      intent: "investigation",
+      title: `Start case: ${target}`,
+      response: "I created a local investigation from that command.",
+      payload: {
+        title: `OSINT: ${target}`,
+        target,
+        targetType,
+        templateId: INVESTIGATION_TEMPLATES.some((template) => template.id === targetType) ? targetType : "blank",
+        summary: "Created from Argus command."
+      },
+      targetView: "investigations",
+      confidence: "high",
+      safety: "local record"
+    });
+  }
+
+  const url = detectFirstUrl(text);
+  const sourceMatch = text.match(/^(?:save|capture|add)\s+(?:source|link)\b/i);
+  if (url && sourceMatch) {
+    return commandResult({
+      intent: "source",
+      title: `Save source: ${url}`,
+      response: "I saved that URL as a local source in the inbox case.",
+      payload: { url, note: text, type: detectOsintTargetType(url), reliability: "unverified" },
+      targetView: "investigations",
+      confidence: "high",
+      safety: "local record"
+    });
+  }
+
+  const openMatch = url && /^(?:open|visit|launch|go to|browse)\b/i.test(text);
+  if (openMatch) {
+    return commandResult({
+      intent: "open_url",
+      title: `Open ${url}`,
+      response: "I queued that URL as an action. Approve it before Android opens anything.",
+      payload: { url, requestedBy: "command", originalText: text },
+      action: {
+        title: `Open ${url}`,
+        capability: "open_url",
+        payload: { url },
+        sensitivity: "low"
+      },
+      targetView: "bridge",
+      confidence: "high",
+      safety: "queued for confirmation"
+    });
+  }
+
+  const searchMatch =
+    text.match(/^(?:search|find)\s+(?:argus\s+)?(?:for\s+)?(.+)/i) ||
+    text.match(/^look\s+for\s+(.+)/i);
+  if (searchMatch?.[1]) {
+    const query = searchMatch[1].trim();
+    return commandResult({
+      intent: "search",
+      title: `Search: ${query}`,
+      response: "I searched the local Argus records.",
+      payload: { query },
+      targetView: "search",
+      confidence: "high",
+      safety: "local search"
+    });
+  }
+
+  const taskMatch = text.match(/^(?:todo|task|remind|check|queue)\b\s*(.*)/i);
+  if (taskMatch) {
+    const taskText = ((taskMatch[1] || text).replace(/^(?:me\s+to|to)\s+/i, "").trim() || text);
+    return commandResult({
+      intent: "local_reminder",
+      title: taskText.slice(0, 80),
+      response: "I queued that as a local action draft for review.",
+      payload: { text: taskText, requestedBy: "command" },
+      action: {
+        title: taskText.slice(0, 80),
+        capability: "local_reminder",
+        payload: { text: taskText },
+        sensitivity: "normal"
+      },
+      targetView: "bridge",
+      confidence: "medium",
+      safety: "queued for confirmation"
+    });
+  }
+
+  return commandResult({
+    intent: "unknown",
+    title: "Command not recognised",
+    response: "I could not route that yet. Try remember, start case, save source, search, open, or remind.",
+    payload: { text },
+    confidence: "low",
+    safety: "no action"
+  });
 }
 
 export function detectOsintTargetType(value) {
@@ -691,6 +882,12 @@ export function getSeedTools() {
       category: "osint",
       status: "ready",
       note: "Start username, email, domain and image metadata cases with local checklists."
+    }),
+    createTool({
+      name: "Command Router",
+      category: "assistant",
+      status: "ready",
+      note: "Parse simple local commands without cloud AI and queue external actions for confirmation."
     }),
     createTool({
       name: "Evidence Locker",

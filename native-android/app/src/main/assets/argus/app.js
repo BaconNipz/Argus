@@ -1,6 +1,7 @@
 import {
   ANDROID_BRIDGE_CAPABILITIES,
   ARGUS_VERSION,
+  COMMAND_EXAMPLES,
   INVESTIGATION_TEMPLATES,
   MEMORY_SENSITIVITY,
   MEMORY_TYPES,
@@ -25,6 +26,7 @@ import {
   detectOsintTargetType,
   getSeedTools,
   normalizeTags,
+  parseArgusCommand,
   reviewMemoryRecords,
   searchLocalRecords,
   summarizeStats
@@ -44,6 +46,7 @@ import {
 const app = document.querySelector("#app");
 const navItems = [
   { id: "dashboard", label: "Dashboard" },
+  { id: "command", label: "Command" },
   { id: "search", label: "Search" },
   { id: "memory", label: "Memory" },
   { id: "investigations", label: "Investigations" },
@@ -68,6 +71,8 @@ const state = {
   memoryQuery: "",
   searchQuery: "",
   workbenchCaseId: "all",
+  commandDraft: "",
+  lastCommand: null,
   toast: "",
   recording: null,
   sharedDraft: null,
@@ -165,6 +170,7 @@ async function handleSharedLaunch() {
 
 function statCount(view) {
   if (view === "search") return "";
+  if (view === "command") return "";
   if (view === "memory") return state.memory.length;
   if (view === "investigations") return state.investigations.length;
   if (view === "workbench") return state.evidence.length;
@@ -286,6 +292,85 @@ function renderDashboard() {
         ${MODULES.map(renderModuleCard).join("")}
       </div>
     </section>
+  `;
+}
+
+function renderCommand() {
+  const canSpeak = Boolean(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  const last = state.lastCommand;
+  return `
+    <section class="band">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Command Layer</p>
+          <h1>Tell Argus what to do</h1>
+          <p>Simple commands are parsed on this device. Anything that opens Android or leaves Argus is queued for approval first.</p>
+        </div>
+        <span class="status ready">local parser</span>
+      </div>
+      <form class="quick-capture" data-form="command">
+        <label class="field">
+          <span>Command</span>
+          <textarea class="textarea" name="command" placeholder="Try: remember that Argus should stay local-first">${escapeHtml(
+            state.commandDraft
+          )}</textarea>
+        </label>
+        <div class="actions">
+          <button class="button" type="submit">Run Command</button>
+          ${
+            last?.response
+              ? `<button class="button secondary" type="button" data-action="speak-command" ${
+                  canSpeak ? "" : "disabled"
+                }>Speak Reply</button>`
+              : ""
+          }
+          <button class="button quiet" type="button" data-action="clear-command">Clear</button>
+        </div>
+      </form>
+    </section>
+    <section class="band">
+      <div class="section-head">
+        <div>
+          <h2>Examples</h2>
+          <p>These are deliberately plain command shapes so Argus stays predictable.</p>
+        </div>
+      </div>
+      <div class="command-examples">
+        ${COMMAND_EXAMPLES.map(
+          (example) =>
+            `<button class="button quiet" type="button" data-action="use-command-example" data-command="${escapeHtml(
+              example
+            )}">${escapeHtml(example)}</button>`
+        ).join("")}
+      </div>
+    </section>
+    ${
+      last
+        ? `<section class="band">
+            <div class="section-head">
+              <div>
+                <h2>Last result</h2>
+                <p>${escapeHtml(last.response)}</p>
+              </div>
+              <span class="status ${last.intent === "unknown" ? "blocked" : "ready"}">${escapeHtml(last.intent.replaceAll("_", " "))}</span>
+            </div>
+            <article class="card item-card">
+              <header>
+                <div>
+                  <h3>${escapeHtml(last.title)}</h3>
+                  <p>${escapeHtml(last.safety)} · ${escapeHtml(last.confidence)} confidence</p>
+                </div>
+              </header>
+              <p>${escapeHtml(renderPayloadSummary(last.payload))}</p>
+              <div class="tag-row">
+                <span class="tag">view: ${escapeHtml(last.targetView || "command")}</span>
+                <span class="tag">local-first</span>
+                <span class="tag">${last.action ? "queued action" : "no external dispatch"}</span>
+              </div>
+            </article>
+          </section>`
+        : ""
+    }
   `;
 }
 
@@ -1284,6 +1369,7 @@ function parseObservedAt(value) {
 function render() {
   const views = {
     dashboard: renderDashboard,
+    command: renderCommand,
     search: renderSearch,
     memory: renderMemory,
     investigations: renderInvestigations,
@@ -1294,6 +1380,107 @@ function render() {
     settings: renderSettings
   };
   app.innerHTML = renderShell((views[state.activeView] || renderDashboard)());
+}
+
+async function getOrCreateInboxInvestigation() {
+  const existing = state.investigations.find((item) => item.title === "Inbox Sources");
+  if (existing) return existing;
+
+  const investigation = createInvestigation({
+    title: "Inbox Sources",
+    summary: "Shared, captured and command-saved source links."
+  });
+  await putRecord("investigations", investigation);
+  return investigation;
+}
+
+async function handleCommand(form) {
+  const commandText = String(new FormData(form).get("command") || "").trim();
+  state.commandDraft = commandText;
+  const parsed = parseArgusCommand(commandText);
+  state.lastCommand = parsed;
+
+  if (parsed.intent === "memory") {
+    await putRecord(
+      "memory",
+      createMemory({
+        text: parsed.payload.text,
+        tags: parsed.payload.tags || ["command"],
+        source: parsed.payload.source || "command"
+      })
+    );
+    await logEvent("command", "Saved memory from command.");
+    await loadData();
+    state.activeView = parsed.targetView;
+    setToast("Command saved memory.");
+    return;
+  }
+
+  if (parsed.intent === "investigation") {
+    const investigation = createInvestigation(parsed.payload);
+    investigation.sources = buildOsintSearchLinks(investigation.target || investigation.title, investigation.targetType).map(
+      (source) => createSource({ ...source, tags: [...(source.tags || []), "command"] })
+    );
+    await putRecord("investigations", investigation);
+    await logEvent("command", "Created investigation from command.");
+    await loadData();
+    state.activeView = parsed.targetView;
+    setToast("Command created case.");
+    return;
+  }
+
+  if (parsed.intent === "source") {
+    const investigation = await getOrCreateInboxInvestigation();
+    investigation.sources = [
+      createSource({
+        url: parsed.payload.url,
+        title: parsed.payload.url,
+        note: parsed.payload.note,
+        type: "link",
+        reliability: parsed.payload.reliability || "unverified",
+        tags: ["command", "inbox"]
+      }),
+      ...(investigation.sources || [])
+    ];
+    investigation.updatedAt = new Date().toISOString();
+    await putRecord("investigations", investigation);
+    await logEvent("command", "Saved source from command.");
+    await loadData();
+    state.activeView = parsed.targetView;
+    setToast("Command saved source.");
+    return;
+  }
+
+  if (parsed.intent === "search") {
+    state.searchQuery = parsed.payload.query || "";
+    await logEvent("command", "Ran local search from command.");
+    await loadData();
+    state.activeView = parsed.targetView;
+    setToast("Command searched Argus.");
+    return;
+  }
+
+  if (parsed.action) {
+    await putRecord("actions", createAction(parsed.action));
+    await logEvent("command", "Queued action from command.");
+    await loadData();
+    state.activeView = parsed.targetView;
+    setToast("Command queued action.");
+    return;
+  }
+
+  await logEvent("command", "Command was not recognised.");
+  setToast("Command not recognised yet.");
+}
+
+function speakCommandResponse() {
+  const response = state.lastCommand?.response;
+  if (!response || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+    setToast("Speech output is not available here.");
+    return;
+  }
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(new SpeechSynthesisUtterance(response));
 }
 
 async function handleQuickCapture(form) {
@@ -1696,6 +1883,19 @@ app.addEventListener("click", async (event) => {
     state.sharedDraft = null;
     render();
   }
+  if (action === "clear-command") {
+    state.commandDraft = "";
+    state.lastCommand = null;
+    render();
+  }
+  if (action === "speak-command") {
+    speakCommandResponse();
+  }
+  if (action === "use-command-example") {
+    state.commandDraft = actionButton.dataset.command || "";
+    state.activeView = "command";
+    render();
+  }
   if (action === "delete-memory") {
     await deleteRecord("memory", id);
     await loadData();
@@ -1764,6 +1964,7 @@ app.addEventListener("submit", async (event) => {
   try {
     const formType = form.dataset.form;
     if (formType === "quick-capture") await handleQuickCapture(form);
+    if (formType === "command") await handleCommand(form);
     if (formType === "global-search") {
       state.searchQuery = new FormData(form).get("query") || "";
       render();

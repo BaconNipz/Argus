@@ -1,8 +1,8 @@
-# Argus v0.5.0
+# Argus v0.6.0
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
-The current working build is an installable offline web app core, with the first native Android shell scaffold under `native-android/`. Argus v0.5 adds a local OSINT Workbench for case review, evidence timelines and link analysis. The release workflow is ready to publish signed APKs once private signing secrets are configured.
+The current working build is an installable offline web app core, with the first native Android shell scaffold under `native-android/`. Argus v0.6 adds a local command layer that can route simple instructions into memory, cases, sources, local search and confirm-first Android action drafts. The release workflow is ready to publish signed APKs once private signing secrets are configured.
 
 ## What v0.1 Does
 
@@ -17,6 +17,9 @@ The current working build is an installable offline web app core, with the first
 - Labels source relationships and optional observed timestamps.
 - Attaches local evidence files through the Android system file picker in the native APK.
 - Reviews cases through a local OSINT Workbench with timeline and link-analysis views.
+- Parses simple local commands without requiring cloud AI.
+- Queues URL-opening and reminder commands for confirmation before dispatch.
+- Speaks command replies when browser or Android text-to-speech is available.
 - Queues draft Android/automation actions for confirmation before dispatch.
 - Exports and imports the whole local Argus dataset as JSON.
 - Includes a share-target route for later Android share-sheet intake.
@@ -69,3 +72,5 @@ Argus v0.4 adds local memory review and OSINT evidence handling while keeping cl
 Argus v0.4.1 adds the signed release update chain. Debug APKs remain useful for quick tests, but real repeat updates need the same private signing key every time.
 
 Argus v0.5 adds the first proper OSINT workbench layer: case health review, evidence timelines and local relationship maps.
+
+Argus v0.6 adds the first command layer. It is intentionally rule-based for now: simple commands work locally, unclear commands are rejected, and any phone/external action still goes through the action queue.

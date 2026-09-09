@@ -97,6 +97,17 @@ Argus v0.5 adds the first local OSINT workbench layer:
 - Local link analysis between cases, targets, sources, domains, entities and evidence.
 - No automated scraping or cloud AI requirement.
 
+## v0.6 Scope
+
+Argus v0.6 adds the first local command layer:
+
+- Phone-friendly Command screen.
+- Rule-based local command parser.
+- Commands for memory capture, case creation, source saving and local search.
+- URL-opening and reminder commands routed into the confirm-first action queue.
+- Optional spoken command replies through browser or Android text-to-speech.
+- Offline speech-to-text remains an adapter target for a later native/local model slice.
+
 ## v0.1 Non-Goals
 
 - No cloud AI integration.
