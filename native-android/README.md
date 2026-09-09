@@ -1,6 +1,6 @@
 # Argus Native Android Shell
 
-Argus v0.2 includes the first native Android shell scaffold. The current environment does not include the Android SDK, so this scaffold is prepared for Android Studio rather than compiled here.
+Argus v0.7 uses a native Kotlin WebView shell with local reminders through WorkManager. APKs and native unit tests build through GitHub Actions or Android Studio; the development workspace does not contain the Android SDK.
 
 ## Target Stack
 
@@ -48,6 +48,12 @@ The scaffold now includes:
 - Android file chooser support for local evidence attachments.
 - Signed release build support through private signing settings.
 - The bundled v0.6 command layer, with URL-opening routed through the confirm-first action queue.
+- Native local reminders through WorkManager 2.10.1, with permission checks and once/daily/weekly schedules.
+- Reminder status, pause/delete controls and notification-tap routing.
+- A bundled-content WebView boundary, confirmation dialogs and approval checks in native dispatch.
+- Backup rules that exclude active native schedule preferences from transfer/restore.
+
+Reminder tests: `gradle -p native-android testDebugUnitTest assembleDebug` from the repository root. See `docs/releases/v0.7.0.md` for behaviour and physical-device checks.
 
 Before opening the native project, run:
 

@@ -1,10 +1,11 @@
-const CACHE_NAME = "argus-v0.6.0";
+const CACHE_NAME = "argus-v0.7.0";
 const APP_ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./argus-core.js",
+  "./routines.js",
   "./android-bridge.js",
   "./db.js",
   "./updater.js",

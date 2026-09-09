@@ -1,4 +1,6 @@
-export const ARGUS_VERSION = "0.6.0";
+import { restoreReminders } from "./routines.js";
+
+export const ARGUS_VERSION = "0.7.0";
 
 export const MEMORY_TYPES = ["note", "person", "project", "source", "place", "account", "task"];
 export const MEMORY_SENSITIVITY = ["normal", "sensitive", "private"];
@@ -250,8 +252,8 @@ export const ANDROID_BRIDGE_CAPABILITIES = [
     id: "local_reminder",
     name: "Local Reminder",
     sensitivity: "normal",
-    status: "planned",
-    description: "Create a local reminder through the native shell."
+    status: "ready",
+    description: "Schedule a local reminder from Routines, with Android notification permission."
   },
   {
     id: "apk_update",
@@ -485,17 +487,11 @@ export function parseArgusCommand(input) {
     return commandResult({
       intent: "local_reminder",
       title: taskText.slice(0, 80),
-      response: "I queued that as a local action draft for review.",
+      response: "Choose a time in Routines, save the reminder, then enable it when ready.",
       payload: { text: taskText, requestedBy: "command" },
-      action: {
-        title: taskText.slice(0, 80),
-        capability: "local_reminder",
-        payload: { text: taskText },
-        sensitivity: "normal"
-      },
-      targetView: "bridge",
+      targetView: "routines",
       confidence: "medium",
-      safety: "queued for confirmation"
+      safety: "choose a time before scheduling"
     });
   }
 
@@ -965,6 +961,7 @@ export function normalizeImportPayload(payload) {
     tools: Array.isArray(safe.tools) ? safe.tools : [],
     voiceNotes: Array.isArray(safe.voiceNotes) ? safe.voiceNotes : [],
     actions: Array.isArray(safe.actions) ? safe.actions : [],
+    reminders: restoreReminders(safe.reminders),
     evidence: Array.isArray(safe.evidence) ? safe.evidence : [],
     settings: Array.isArray(safe.settings) ? safe.settings : [],
     events: Array.isArray(safe.events) ? safe.events : []

@@ -31,7 +31,8 @@ import {
   searchLocalRecords,
   summarizeStats
 } from "./argus-core.js";
-import { dispatchNativeAction, readNativeBridgeInfo, registerNativeInbox } from "./android-bridge.js";
+import { dispatchNativeAction, readNativeBridgeInfo, registerNativeInbox, reminderBridge } from "./android-bridge.js";
+import { createReminder, mergeNativeReminders, toLocalDateTime } from "./routines.js";
 import { CURRENT_ANDROID_BUILD, DEFAULT_UPDATE_MANIFEST_URL, checkForUpdate } from "./updater.js";
 import {
   clearStore,
@@ -47,6 +48,7 @@ const app = document.querySelector("#app");
 const navItems = [
   { id: "dashboard", label: "Dashboard" },
   { id: "command", label: "Command" },
+  { id: "routines", label: "Routines" },
   { id: "search", label: "Search" },
   { id: "memory", label: "Memory" },
   { id: "investigations", label: "Investigations" },
@@ -65,6 +67,11 @@ const state = {
   tools: [],
   voiceNotes: [],
   actions: [],
+  reminders: [],
+  reminderDraft: {},
+  reminderPermission: false,
+  reminderError: "",
+  routineBusy: false,
   evidence: [],
   settings: [],
   events: [],
@@ -131,6 +138,7 @@ async function loadData() {
   state.tools = await listRecords("tools");
   state.voiceNotes = await listRecords("voiceNotes");
   state.actions = await listRecords("actions");
+  state.reminders = await listRecords("reminders");
   state.evidence = await listRecords("evidence");
   state.settings = await listRecords("settings");
   state.events = await listRecords("events");
@@ -171,6 +179,7 @@ async function handleSharedLaunch() {
 function statCount(view) {
   if (view === "search") return "";
   if (view === "command") return "";
+  if (view === "routines") return state.reminders.filter((item) => item.enabled).length;
   if (view === "memory") return state.memory.length;
   if (view === "investigations") return state.investigations.length;
   if (view === "workbench") return state.evidence.length;
@@ -372,6 +381,123 @@ function renderCommand() {
         : ""
     }
   `;
+}
+
+function hasReminderBridge() {
+  return state.bridgeInfo.capabilities?.includes("local_reminder") && typeof window.ArgusAndroid?.getReminderState === "function";
+}
+
+function renderRoutines() {
+  const native = hasReminderBridge();
+  const draft = state.reminderDraft;
+  const sorted = [...state.reminders].sort((a, b) => Number(b.enabled) - Number(a.enabled) || String(a.nextRunAt).localeCompare(String(b.nextRunAt)));
+  return `
+    <section class="band">
+      <div class="section-head"><div><p class="eyebrow">On this phone</p><h1>Reminders and routines</h1>
+        <p>Save a reminder, check its time, then enable it. Argus can notify you once, daily or weekly.</p></div></div>
+      <div class="routine-notice" role="status">
+        <strong>${native ? (state.reminderPermission ? "Notifications are enabled" : "Notifications are off") : "Save here; schedule in the Android app"}</strong>
+        <p>${native ? "Android handles delivery while Argus is closed. Battery saving, force-stop or a powered-off phone can delay reminders. These are approximate reminders; use your phone alarm for exact timing." : "The browser can save and edit reminders. Background notifications need the Argus v0.7 Android APK."}</p>
+        ${state.reminderError ? `<p>${escapeHtml(state.reminderError)}</p>` : ""}
+        ${native ? `<div class="actions">
+          ${!state.reminderPermission ? `<button class="button" data-action="reminder-permission">Enable notifications</button>` : ""}
+          <button class="button quiet" data-action="reminder-settings">Android notification settings</button>
+          <button class="button quiet" data-action="refresh-reminders">Refresh status</button>
+        </div>` : ""}
+      </div>
+      <form class="quick-capture" data-form="reminder">
+        <h2>${draft.id ? "Edit reminder" : "New reminder"}</h2>
+        <label class="field"><span>What should Argus remind you about?</span>
+          <input class="input" name="title" required maxlength="120" placeholder="Review today's notes" value="${escapeHtml(draft.title || "")}"></label>
+        <div class="field-grid">
+          <label class="field"><span>First reminder (phone's local time)</span>
+            <input class="input" name="due" type="datetime-local" required value="${escapeHtml(draft.due || "")}"></label>
+          <label class="field"><span>Repeat</span><select class="select" name="repeat">
+            ${[["once", "Once"], ["daily", "Daily"], ["weekly", "Weekly"]].map(([value, label]) => `<option value="${value}" ${(draft.repeat || "once") === value ? "selected" : ""}>${label}</option>`).join("")}
+          </select></label>
+        </div>
+        <label class="field"><span>Optional note</span><textarea class="textarea" name="note" maxlength="500">${escapeHtml(draft.note || "")}</textarea></label>
+        <p class="routine-help">Repeats stay in the time zone where you save them. Saving edits pauses the reminder until you enable it again.</p>
+        <div class="actions"><button class="button" type="submit">Save reminder</button>
+          <button class="button quiet" type="button" data-action="clear-reminder-draft">Clear form</button></div>
+      </form>
+    </section>
+    <div class="list-grid">
+      ${sorted.length ? sorted.map((item) => `<article class="card item-card" id="${escapeHtml(item.id)}">
+        <header><div><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.repeat)} · ${escapeHtml(formatDate(item.nextRunAt))} (phone time)</p></div>
+          <span class="status ${item.enabled ? "ready" : "stub"}">${escapeHtml(item.status || "paused")}</span></header>
+        ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}
+        <p class="routine-help">Repeat time zone: ${escapeHtml(item.timeZone || "UTC")}</p>
+        ${item.lastResult ? `<p>${escapeHtml(item.lastResult)}</p>` : ""}
+        ${item.lastFiredAt ? `<p>Last notification posted: ${escapeHtml(formatDate(item.lastFiredAt))}</p>` : ""}
+        <div class="actions">
+          ${item.enabled ? `<button class="button secondary" data-action="pause-reminder" data-id="${escapeHtml(item.id)}">Pause</button>` :
+            `<button class="button" data-action="enable-reminder" data-id="${escapeHtml(item.id)}" ${native ? "" : "disabled"}>Enable reminder</button>`}
+          <button class="button quiet" data-action="edit-reminder" data-id="${escapeHtml(item.id)}">Edit</button>
+          <button class="button quiet" data-action="delete-reminder" data-id="${escapeHtml(item.id)}">Delete</button>
+        </div>
+      </article>`).join("") : `<p class="empty">No reminders yet. Try a reminder to review your notes or export an Argus backup.</p>`}
+    </div>`;
+}
+
+async function refreshReminders() {
+  if (!hasReminderBridge()) return;
+  try {
+    const result = reminderBridge("getReminderState");
+    state.reminderPermission = result.notificationsEnabled === true;
+    const merged = mergeNativeReminders(await listRecords("reminders"), result.reminders || []);
+    for (const item of merged) await putRecord("reminders", item);
+    state.reminders = merged;
+    state.reminderError = "";
+  } catch (error) {
+    state.reminderError = error.message || "Could not read Android reminder status.";
+  }
+}
+
+async function handleReminder(form) {
+  const input = new FormData(form);
+  const old = state.reminders.find((item) => item.id === state.reminderDraft.id);
+  const reminder = createReminder({
+    id: old?.id, createdAt: old?.createdAt, lastFiredAt: old?.lastFiredAt,
+    title: input.get("title"), note: input.get("note"), repeat: input.get("repeat"),
+    nextRunAt: input.get("due")
+  });
+  if (old && hasReminderBridge()) reminderBridge("cancelReminder", { id: old.id, delete: true });
+  await putRecord("reminders", reminder);
+  state.reminderDraft = {};
+  await loadData();
+  setToast("Reminder saved. Enable it when you're ready.");
+}
+
+async function changeReminder(action, id) {
+  const item = state.reminders.find((record) => record.id === id);
+  if (!item) return;
+  if (action === "edit-reminder") {
+    state.reminderDraft = { ...item, due: toLocalDateTime(item.nextRunAt) };
+    render();
+    app.querySelector('[data-form="reminder"]')?.scrollIntoView({ block: "start" });
+    return;
+  }
+  if (action === "enable-reminder") {
+    const validated = createReminder(item);
+    const result = reminderBridge("scheduleReminder", validated);
+    await putRecord("reminders", { ...validated, ...result.reminder });
+  } else if (action === "pause-reminder") {
+    const result = reminderBridge("cancelReminder", { id });
+    await putRecord("reminders", { ...item, ...result.reminder, enabled: false, status: "paused" });
+  } else if (action === "delete-reminder") {
+    if (hasReminderBridge()) reminderBridge("cancelReminder", { id, delete: true });
+    await deleteRecord("reminders", id);
+    if (state.reminderDraft.id === id) state.reminderDraft = {};
+  }
+  await loadData();
+  setToast(action === "enable-reminder" ? "Reminder scheduled on this phone." : action === "pause-reminder" ? "Reminder paused." : "Reminder deleted.");
+}
+
+async function routineChange(callback) {
+  if (state.routineBusy) return;
+  state.routineBusy = true;
+  try { await callback(); } finally { state.routineBusy = false; }
 }
 
 function renderSearch() {
@@ -1370,6 +1496,7 @@ function render() {
   const views = {
     dashboard: renderDashboard,
     command: renderCommand,
+    routines: renderRoutines,
     search: renderSearch,
     memory: renderMemory,
     investigations: renderInvestigations,
@@ -1457,6 +1584,13 @@ async function handleCommand(form) {
     await loadData();
     state.activeView = parsed.targetView;
     setToast("Command searched Argus.");
+    return;
+  }
+
+  if (parsed.intent === "local_reminder") {
+    state.reminderDraft = { title: parsed.payload.text };
+    state.activeView = "routines";
+    setToast("Choose a time, save, then enable your reminder.");
     return;
   }
 
@@ -1722,10 +1856,15 @@ async function handleImport(form) {
   const file = form.elements.backup.files?.[0];
   if (!file) return;
   const payload = JSON.parse(await file.text());
-  await importArgusData(payload);
+  if (!payload || typeof payload !== "object" || !Array.isArray(payload.memory)) throw new Error("Choose an Argus JSON backup.");
+  if (!window.confirm("Replace this device's Argus data with this backup? Existing reminders will be cancelled and restored reminders will be paused.")) return;
+  if (hasReminderBridge()) reminderBridge("clearReminders");
+  try { await importArgusData(payload); }
+  catch (error) { await refreshReminders(); await loadData(); throw error; }
   await logEvent("import", `Imported ${file.name}.`);
   await loadData();
-  setToast("Backup imported.");
+  state.reminderDraft = {};
+  setToast("Backup imported. Restored reminders are paused.");
 }
 
 async function handleUpdateSettings(form) {
@@ -1772,6 +1911,7 @@ async function checkUpdates() {
 }
 
 async function exportData() {
+  await refreshReminders();
   const data = await exportArgusData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -1830,10 +1970,12 @@ function stopRecording() {
 async function wipeData() {
   const confirmed = window.confirm("Clear all local Argus data on this device?");
   if (!confirmed) return;
+  if (hasReminderBridge()) reminderBridge("clearReminders");
   for (const store of STORES) {
     await clearStore(store);
   }
   await ensureSeedData();
+  state.reminderDraft = {};
   await loadData();
   setToast("Local data cleared.");
 }
@@ -1855,6 +1997,12 @@ async function updateAction(id, patch, message) {
 async function dispatchAction(id) {
   const action = state.actions.find((item) => item.id === id);
   if (!action) return;
+  if (action.capability === "local_reminder") {
+    state.reminderDraft = { title: action.payload?.text || action.title };
+    state.activeView = "routines";
+    setToast("Choose a time to turn this draft into a reminder.");
+    return;
+  }
   const result = await dispatchNativeAction(action);
   await updateAction(
     id,
@@ -1879,6 +2027,13 @@ app.addEventListener("click", async (event) => {
 
   const { action, id } = actionButton.dataset;
   try {
+  if (["enable-reminder", "pause-reminder", "edit-reminder", "delete-reminder"].includes(action)) {
+    await routineChange(() => changeReminder(action, id));
+  }
+  if (action === "clear-reminder-draft") { state.reminderDraft = {}; render(); }
+  if (action === "reminder-permission") reminderBridge("requestReminderPermission");
+  if (action === "reminder-settings") reminderBridge("openNotificationSettings");
+  if (action === "refresh-reminders") { await routineChange(refreshReminders); render(); }
   if (action === "clear-shared-draft") {
     state.sharedDraft = null;
     render();
@@ -1937,10 +2092,10 @@ app.addEventListener("click", async (event) => {
     setToast("Action deleted.");
   }
   if (action === "export-data") {
-    await exportData();
+    await routineChange(exportData);
   }
   if (action === "wipe-data") {
-    await wipeData();
+    await routineChange(wipeData);
   }
   if (action === "check-updates") {
     await checkUpdates();
@@ -1956,6 +2111,11 @@ app.addEventListener("click", async (event) => {
   }
 });
 
+app.addEventListener("input", (event) => {
+  const form = event.target.closest('[data-form="reminder"]');
+  if (form && event.target.name) state.reminderDraft[event.target.name] = event.target.value;
+});
+
 app.addEventListener("submit", async (event) => {
   const form = event.target.closest("form[data-form]");
   if (!form) return;
@@ -1963,6 +2123,7 @@ app.addEventListener("submit", async (event) => {
 
   try {
     const formType = form.dataset.form;
+    if (formType === "reminder") await routineChange(() => handleReminder(form));
     if (formType === "quick-capture") await handleQuickCapture(form);
     if (formType === "command") await handleCommand(form);
     if (formType === "global-search") {
@@ -1985,7 +2146,7 @@ app.addEventListener("submit", async (event) => {
     if (formType === "tool") await handleTool(form);
     if (formType === "action") await handleAction(form);
     if (formType === "update-settings") await handleUpdateSettings(form);
-    if (formType === "import-data") await handleImport(form);
+    if (formType === "import-data") await routineChange(() => handleImport(form));
   } catch (error) {
     setToast(error?.message || "Argus could not complete that action.");
   }
@@ -2007,6 +2168,7 @@ async function init() {
     });
     await ensureSeedData();
     await loadData();
+    await refreshReminders();
     await handleSharedLaunch();
     state.dbReady = true;
     render();
@@ -2020,5 +2182,16 @@ async function init() {
     `;
   }
 }
+
+window.ArgusOpenReminder = () => {
+  state.activeView = "routines";
+  if (state.dbReady) render();
+  return true;
+};
+window.addEventListener("argus-native-resume", async () => {
+  if (!state.dbReady || state.routineBusy) return;
+  await routineChange(refreshReminders);
+  if (state.activeView === "routines") render();
+});
 
 init();

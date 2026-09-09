@@ -1,10 +1,10 @@
-# Argus v0.6.0
+# Argus v0.7.0
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
-The current working build is an installable offline web app core, with the first native Android shell scaffold under `native-android/`. Argus v0.6 adds a local command layer that can route simple instructions into memory, cases, sources, local search and confirm-first Android action drafts. The release workflow is ready to publish signed APKs once private signing secrets are configured.
+The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.7 adds local reminders and repeating routines, with Android handling notifications while the app is closed. It needs no cloud AI or paid service. The release workflow can publish signed APKs once private signing secrets are configured.
 
-## What v0.1 Does
+## What Argus Does Now
 
 - Runs as a responsive mobile app from the `dist/` build.
 - Works offline after first load through a service worker.
@@ -18,7 +18,12 @@ The current working build is an installable offline web app core, with the first
 - Attaches local evidence files through the Android system file picker in the native APK.
 - Reviews cases through a local OSINT Workbench with timeline and link-analysis views.
 - Parses simple local commands without requiring cloud AI.
-- Queues URL-opening and reminder commands for confirmation before dispatch.
+- Queues URL-opening commands for confirmation before dispatch.
+- Sends reminder commands to Routines so you can choose a time.
+- Saves one-off, daily and weekly reminders, with explicit enable, pause, edit and delete controls.
+- Uses Android notifications and background scheduling in the APK; browser reminders remain saved drafts.
+- Shows notification permission and delivery status. Battery saving may delay delivery.
+- Restores reminders from backups in a paused state.
 - Speaks command replies when browser or Android text-to-speech is available.
 - Queues draft Android/automation actions for confirmation before dispatch.
 - Exports and imports the whole local Argus dataset as JSON.
@@ -74,3 +79,5 @@ Argus v0.4.1 adds the signed release update chain. Debug APKs remain useful for 
 Argus v0.5 adds the first proper OSINT workbench layer: case health review, evidence timelines and local relationship maps.
 
 Argus v0.6 adds the first command layer. It is intentionally rule-based for now: simple commands work locally, unclear commands are rejected, and any phone/external action still goes through the action queue.
+
+Argus v0.7 adds local notification routines. See [the v0.7 guide](docs/releases/v0.7.0.md) for what changed, how to use it, and what still needs device validation.

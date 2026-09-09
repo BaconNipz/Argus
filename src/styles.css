@@ -779,3 +779,10 @@ audio {
     display: grid;
   }
 }
+:root {
+  --routine-notice: #eaf4ee;
+}
+
+.routine-notice { background: var(--routine-notice); padding: 1rem; border-radius: 12px; margin-bottom: 1.25rem; }
+.routine-notice p, .routine-help { font-size: .9rem; line-height: 1.5; }
+[data-form="reminder"] input[type="datetime-local"] { min-width: 0; max-width: 100%; }

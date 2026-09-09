@@ -18,8 +18,8 @@ android {
         applicationId = "com.argus.localcore"
         minSdk = 28
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.6.0"
+        versionCode = 8
+        versionName = "0.7.0"
     }
 
     signingConfigs {
@@ -58,6 +58,8 @@ android {
 
 dependencies {
     implementation("androidx.webkit:webkit:1.12.1")
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
+    testImplementation("junit:junit:4.13.2")
 }
 
 kotlin {
