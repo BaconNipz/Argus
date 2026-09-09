@@ -77,6 +77,15 @@ This first release used typed commands and optional speech output. On-device spe
 - Cancel/finish controls, foreground-only capture, time limits and stale-callback protection.
 - Typed fallback, without switching to an online recognizer.
 
+## v0.9 Reminder Alerts And Offline Spoken Replies
+
+- High-importance sound/vibration defaults for new reminder categories, and repeat occurrences can alert again.
+- Preserve existing category preferences; open the exact category settings for sound and pop-up changes.
+- Show sound-mode, volume and Do Not Disturb checks, plus an immediate test notification.
+- Native Android text-to-speech with installed offline voice selection, test and stop controls.
+- Reject network-only or not-installed voices, handle audio focus and stop output for capture/backgrounding.
+- User confirmed reminder delivery in v0.7/v0.8; v0.9 sound, banners and spoken output still need phone validation.
+
 ## Following slices
 
 - Add Android intents for safe actions.
@@ -84,6 +93,6 @@ This first release used typed commands and optional speech output. On-device spe
 - Add clipboard/share workflows.
 - Add background checks with clear battery limits.
 - Use device feedback to choose whether an Argus-bundled offline speech engine is needed alongside the system adapter.
-- Add native offline speech output with an explicit check that the chosen voice does not require network synthesis.
+- Add reminder notification actions such as snooze and done, informed by device testing.
 
 Release signing still needs the four private GitHub Actions secrets. Debug builds remain a temporary testing path.

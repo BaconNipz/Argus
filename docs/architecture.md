@@ -51,6 +51,8 @@ Import and wipe cancel native work before replacing local data. JSON restore str
 
 The WebView keeps external pages outside the bridge-bearing view. Content Security Policy restricts executable scripts to bundled assets and blocks frames and objects. Native generic action dispatch checks approval as well as the web UI.
 
+Reminder alerts use the existing `argus_reminders` notification channel. New channels request `IMPORTANCE_HIGH`, the system notification sound and vibration. Existing channel preferences are preserved; Argus links directly to channel settings instead of replacing the channel. Each recurring occurrence uses `setOnlyAlertOnce(false)`, so an undismissed earlier card does not suppress its alert. The test button uses the same notification builder without creating a schedule. Status reads current importance, sound, vibration, ringer mode, notification volume and Do Not Disturb; it cannot confirm that Samsung displayed a banner.
+
 ## On-device Speech Input
 
 `OfflineSpeechController` owns microphone sessions on Android's main thread. It checks `isOnDeviceRecognitionAvailable` and creates only `createOnDeviceSpeechRecognizer` instances on API 31+. There is no generic recognizer or browser speech-recognition fallback. API 33+ supports explicit language-support checks and user-requested model downloads.
@@ -58,6 +60,12 @@ The WebView keeps external pages outside the bridge-bearing view. Content Securi
 Each capture has a unique session ID. Both Kotlin and JavaScript reject stale and terminal-session callbacks. A recording is stopped after at most 30 seconds, with a further 10-second bound for a final result; cancel, background and destroy release the recognizer. The controller does not persist audio or transcripts.
 
 `speech.js` reduces native events into capture status and review text. Receiving a transcript never invokes the command parser or action dispatcher. The user chooses Use text, may edit it in Command, then chooses Run Command. Existing external-action approval rules still apply. The selected speech language is stored in the existing settings store; database schema remains 4.
+
+## Offline Speech Output
+
+`OfflineTtsController` initializes the system text-to-speech engine, lists voices with `isNetworkConnectionRequired == false` and no `KEY_FEATURE_NOT_INSTALLED`, and stores the chosen voice per engine in native preferences. Automatic selection stays within the phone's language; a missing saved voice requires another explicit choice. Before each utterance, the controller rechecks the voice, calls `setVoice` and verifies the resulting voice. It does not call `setLanguage`, trigger downloads or fall back to browser synthesis.
+
+Engine callbacks are posted onto the main thread. Unique utterance IDs reject stale callbacks; audio focus, a two-minute playback limit, Stop, microphone capture, navigation and backgrounding end playback. Engine initialization has a ten-second timeout and generation checks; destruction releases the engine. Command responses are passed to speech only after the user taps Speak Reply; no text/audio is persisted by this adapter. Native voices are trusted according to Android engine metadata, so offline behaviour is part of phone validation. The browser retains text replies.
 
 ## Module Boundary
 

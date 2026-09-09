@@ -130,6 +130,15 @@ Argus v0.6 adds the first local command layer:
 - Browser and unsupported-device users retain typed commands.
 - Existing voice-note recording is separate; saved audio-file transcription and a bundled speech engine remain future work.
 
+## v0.9 Scope
+
+- Reminder categories request banner priority, sound and vibration on first creation; existing Android category preferences remain intact.
+- Repeating reminders can alert again when their previous card is still visible.
+- Direct reminder-category settings, alert diagnostics and a test-notification button.
+- Command reply playback through installed Android voices marked as offline, with voice picker, test and stop controls.
+- No implicit voice download or online synthesis fallback. Android settings manage engine and voice installation.
+- Playback stops on microphone capture, navigation, backgrounding or audio focus loss; late callbacks cannot restart it.
+
 ## Current Boundaries
 
 - No cloud AI integration.

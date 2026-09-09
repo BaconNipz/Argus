@@ -24,6 +24,8 @@ class MainActivity : Activity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     lateinit var offlineSpeech: OfflineSpeechController
         private set
+    lateinit var offlineTts: OfflineTtsController
+        private set
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +94,7 @@ class MainActivity : Activity() {
             }
         }
         offlineSpeech = OfflineSpeechController(this, ::emitSpeechEvent)
+        offlineTts = OfflineTtsController(this, ::emitTtsEvent)
         webView.addJavascriptInterface(ArgusBridge(this), "ArgusAndroid")
 
         setContentView(webView)
@@ -112,16 +115,19 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::offlineSpeech.isInitialized) offlineSpeech.resume()
+        if (::offlineTts.isInitialized) offlineTts.resume()
         refreshReminderUi()
     }
 
     override fun onPause() {
         if (::offlineSpeech.isInitialized) offlineSpeech.pause()
+        if (::offlineTts.isInitialized) offlineTts.pause()
         super.onPause()
     }
 
     override fun onDestroy() {
         if (::offlineSpeech.isInitialized) offlineSpeech.destroy()
+        if (::offlineTts.isInitialized) offlineTts.destroy()
         filePathCallback?.onReceiveValue(null)
         filePathCallback = null
         if (::webView.isInitialized) {
@@ -134,6 +140,11 @@ class MainActivity : Activity() {
     fun emitSpeechEvent(event: JSONObject) {
         if (!::webView.isInitialized || isDestroyed) return
         webView.evaluateJavascript("window.ArgusSpeechInbox?.receive(${event})", null)
+    }
+
+    fun emitTtsEvent(event: JSONObject) {
+        if (!::webView.isInitialized || isDestroyed) return
+        webView.evaluateJavascript("window.ArgusTtsInbox?.receive(${event})", null)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

@@ -15,10 +15,10 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.8.0-native")
+            .put("version", "0.9.0-native")
             .put("host", "android")
-            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "local_reminder", "offline_speech")))
-            .put("message", "Android shell attached. Reminders and on-device speech input are available to check.")
+            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "local_reminder", "offline_speech", "offline_tts")))
+            .put("message", "Android shell attached. Reminder alerts and on-device speech input/output are available to check.")
             .toString()
     }
 
@@ -66,10 +66,19 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun openNotificationSettings(ignored: String): String = guarded {
         activity.runOnUiThread {
-            activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName))
+            val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, ReminderScheduler.CHANNEL)
+            runCatching { activity.startActivity(intent) }.onFailure {
+                runCatching { activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)) }
+            }
         }
         JSONObject().put("status", "completed").toString()
     }
+
+    @JavascriptInterface
+    fun testReminderNotification(ignored: String): String = guarded { reminders.testNotification().toString() }
 
     @JavascriptInterface
     fun getSpeechState(ignored: String): String = activity.offlineSpeech.snapshot()
@@ -132,6 +141,55 @@ class ArgusBridge(private val activity: MainActivity) {
         val language = checkedSpeechLanguage(JSONObject(payload))
         activity.runOnUiThread { activity.offlineSpeech.checkLanguage(language, download = true) }
         JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun getTtsState(ignored: String): String = activity.offlineTts.snapshot()
+
+    @JavascriptInterface
+    fun refreshTtsVoices(ignored: String): String = guarded {
+        activity.runOnUiThread { activity.offlineTts.initialize() }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun selectTtsVoice(payload: String): String = guarded {
+        val name = JSONObject(payload).getString("voiceId")
+        require(name.isNotBlank() && name.length <= 500) { "Choose an installed offline voice." }
+        activity.runOnUiThread { activity.offlineTts.selectVoice(name) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun speakOffline(payload: String): String = guarded {
+        val input = JSONObject(payload)
+        val id = checkedTtsId(input)
+        val text = input.getString("text").trim()
+        require(text.isNotBlank() && text.length <= android.speech.tts.TextToSpeech.getMaxSpeechInputLength()) { "This reply is empty or too long to speak." }
+        activity.runOnUiThread { activity.offlineTts.speak(id, text) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun stopTts(payload: String): String = guarded {
+        val id = checkedTtsId(JSONObject(payload))
+        activity.runOnUiThread { activity.offlineTts.stop(id) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun openTtsSettings(ignored: String): String = guarded {
+        activity.runOnUiThread {
+            runCatching { activity.startActivity(Intent("com.android.settings.TTS_SETTINGS")) }.onFailure {
+                activity.emitTtsEvent(JSONObject().put("type", "notice")
+                    .put("message", "Open your phone Settings and search for Text-to-speech to manage voices."))
+            }
+        }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    private fun checkedTtsId(input: JSONObject): String = input.getString("sessionId").also {
+        require(it.matches(Regex("tts-[a-zA-Z0-9-]{1,80}"))) { "Invalid speech-output session." }
     }
 
     private fun checkedSpeechId(input: JSONObject): String = input.getString("sessionId").also {

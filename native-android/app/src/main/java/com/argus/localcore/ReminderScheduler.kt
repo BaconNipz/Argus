@@ -9,7 +9,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.RingtoneManager
 import android.os.Build
+import android.provider.Settings
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -28,9 +32,13 @@ class ReminderScheduler(context: Context) {
     private val work = WorkManager.getInstance(app)
 
     init {
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Argus reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
+        // Existing channels keep the user's settings. Never delete/recreate a channel to raise importance.
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Argus reminders", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Reminders and routines you enable in Argus"
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            enableVibration(true)
         })
     }
 
@@ -45,7 +53,32 @@ class ReminderScheduler(context: Context) {
             if (record.optBoolean("enabled")) enqueue(record, ExistingWorkPolicy.KEEP)
         }
         JSONObject().put("status", "completed").put("notificationsEnabled", notificationsEnabled())
+            .put("notificationSettings", alertSettings())
             .put("reminders", JSONArray(records))
+    }
+
+    private fun alertSettings(): JSONObject {
+        val channel = manager.getNotificationChannel(CHANNEL)
+        val audio = app.getSystemService(AudioManager::class.java)
+        val sound = channel?.sound
+        val hasSound = sound != null && (sound != Settings.System.DEFAULT_NOTIFICATION_URI ||
+            RingtoneManager.getActualDefaultRingtoneUri(app, RingtoneManager.TYPE_NOTIFICATION) != null)
+        return JSONObject().put("importance", channel?.importance ?: NotificationManager.IMPORTANCE_NONE)
+            .put("soundConfigured", hasSound).put("vibration", channel?.shouldVibrate() == true)
+            .put("ringerMode", when (audio.ringerMode) {
+                AudioManager.RINGER_MODE_NORMAL -> "normal"
+                AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
+                else -> "silent"
+            }).put("notificationVolume", audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION))
+            .put("doNotDisturb", manager.currentInterruptionFilter in listOf(
+                NotificationManager.INTERRUPTION_FILTER_PRIORITY, NotificationManager.INTERRUPTION_FILTER_NONE,
+                NotificationManager.INTERRUPTION_FILTER_ALARMS))
+    }
+
+    fun testNotification(): JSONObject {
+        require(notificationsEnabled()) { "Enable Argus notifications before sending a test alert." }
+        postNotification("argus-alert-test", "Argus test alert", "This uses the same sound and banner settings as your reminders.")
+        return JSONObject().put("status", "completed").put("message", "Test alert sent to Android. If it was quiet, review the alert status below.")
     }
 
     fun schedule(input: JSONObject): JSONObject = synchronized(LOCK) {
@@ -118,19 +151,8 @@ class ReminderScheduler(context: Context) {
             save(record)
             return@synchronized
         }
-        val intent = Intent(app, MainActivity::class.java).apply {
-            data = Uri.parse("argus://reminder/$id")
-            putExtra("argus_reminder", id)
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val pending = PendingIntent.getActivity(app, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = Notification.Builder(app, CHANNEL)
-            .setSmallIcon(R.drawable.ic_argus).setContentTitle(record.getString("title"))
-            .setContentText(record.optString("note").ifBlank { "Tap to open Argus routines." })
-            .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true)
-            .setVisibility(Notification.VISIBILITY_PRIVATE).setCategory(Notification.CATEGORY_REMINDER).build()
         try {
-            manager.notify(id, NOTIFICATION_ID, notification)
+            postNotification(id, record.getString("title"), record.optString("note").ifBlank { "Tap to open Argus routines." })
         } catch (_: SecurityException) {
             record.put("enabled", false).put("status", "paused").put("lastResult", "Notifications were blocked. Review Android notification settings.")
             save(record)
@@ -143,6 +165,22 @@ class ReminderScheduler(context: Context) {
         if (next != null) record.put("nextRunAt", Instant.ofEpochMilli(next).toString())
         save(record)
         if (next != null) enqueue(record, ExistingWorkPolicy.APPEND_OR_REPLACE)
+    }
+
+    private fun postNotification(id: String, title: String, note: String) {
+        val intent = Intent(app, MainActivity::class.java).apply {
+            data = Uri.parse("argus://reminder/$id")
+            putExtra("argus_reminder", id)
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pending = PendingIntent.getActivity(app, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification = Notification.Builder(app, CHANNEL)
+            .setSmallIcon(R.drawable.ic_argus).setContentTitle(title).setContentText(note)
+            .setContentIntent(pending).setAutoCancel(true)
+            // A new daily/weekly occurrence should alert even when yesterday's card was not dismissed.
+            .setOnlyAlertOnce(false)
+            .setVisibility(Notification.VISIBILITY_PRIVATE).setCategory(Notification.CATEGORY_REMINDER).build()
+        manager.notify(id, NOTIFICATION_ID, notification)
     }
 
     private fun enqueue(record: JSONObject, policy: ExistingWorkPolicy) {
