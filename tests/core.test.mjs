@@ -71,7 +71,7 @@ test("parses local commands into safe routes", () => {
   assert.equal(openUrl.action.capability, "open_url");
   assert.equal(openUrl.safety, "queued for confirmation");
   assert.equal(reminder.intent, "local_reminder");
-  assert.equal(reminder.action.payload.text, "export an Argus backup");
+  assert.equal(reminder.payload.text, "export an Argus backup");
   assert.equal(unknown.intent, "unknown");
 });
 

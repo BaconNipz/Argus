@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Argus</title>
+  <rect width="512" height="512" rx="96" fill="#102018"/>
+  <path d="M256 70 390 120v110c0 92-55 169-134 212-79-43-134-120-134-212V120L256 70Z" fill="#137a52"/>
+  <path d="M256 156c73 0 132 70 156 100-24 30-83 100-156 100s-132-70-156-100c24-30 83-100 156-100Z" fill="#f4f7f5"/>
+  <circle cx="256" cy="256" r="56" fill="#102018"/>
+  <circle cx="256" cy="256" r="25" fill="#42c993"/>
+</svg>
+

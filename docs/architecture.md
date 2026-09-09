@@ -12,7 +12,7 @@ Argus is an Android-first personal assistant, OSINT notebook and automation hub.
 | Local Core | Data model, module registry, import/export, privacy defaults | Implemented |
 | Local Storage | Memory, investigations, evidence, tool records, voice notes and events | IndexedDB |
 | Capability Modules | OSINT, memory, voice, automation and assistant tools | Ready, stubbed and planned modules |
-| Android Shell | Deep phone permissions and background services | WebView scaffold |
+| Android Shell | Local assets, share intake, files, URL actions and reminders | Kotlin WebView shell and WorkManager |
 | Local AI Runtime | Optional local LLM, transcription, embeddings and ranking | Planned |
 
 ## Data Stores
@@ -27,6 +27,7 @@ Argus uses these local object stores:
 | `tools` | Local registry of Argus capabilities and external/manual tools |
 | `voiceNotes` | Local audio captures and optional transcripts |
 | `actions` | Confirm-first drafts for native Android or manual actions |
+| `reminders` | Saved routines and mirrored Android scheduling/delivery state (schema 4) |
 | `settings` | Device-local preferences |
 | `events` | Simple audit trail for local actions |
 
@@ -35,6 +36,18 @@ Argus uses these local object stores:
 The first command layer is a deterministic local parser. It recognises simple commands for memory capture, case creation, source saving, local search and safe action drafts. It does not call cloud AI, does not infer hidden intent and does not dispatch Android actions directly.
 
 External actions such as opening URLs are converted into records in the `actions` store. The user must approve and dispatch them through the Android bridge flow.
+
+Reminder commands open the Routines form without choosing a time or enabling a schedule. Saved reminders start paused. The Enable button is the user's explicit scheduling action.
+
+## Local Reminder Scheduling
+
+Android owns active schedules in private SharedPreferences and WorkManager. IndexedDB stores drafts and mirrors native status when the app starts or resumes. One unique work chain per reminder prevents duplicate pending schedules; revision and due-time checks make replaced or cancelled workers no-ops. A native lock serialises posting, editing and cancellation.
+
+Each occurrence is a delayed one-time worker. Daily and weekly repeats calculate the next calendar date in the saved time zone, preserving wall-clock time across daylight saving and skipping missed repeats. Jobs have no network requirement, polling loop, exact-alarm permission or foreground service. They are approximate notifications, subject to Android battery scheduling and force-stop restrictions.
+
+Import and wipe cancel native work before replacing local data. JSON restore strips scheduler authority and restores reminders paused. Native schedule preferences are excluded from Android backup/device transfer so schedules are not silently enabled on another phone. Native records take precedence over a stale IndexedDB mirror; missing native schedules become paused drafts.
+
+The WebView keeps external pages outside the bridge-bearing view. Content Security Policy restricts executable scripts to bundled assets and blocks frames and objects. Native generic action dispatch checks approval as well as the web UI.
 
 ## Module Boundary
 

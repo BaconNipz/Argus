@@ -10,6 +10,7 @@ const files = [
   ["src/styles.css", "styles.css"],
   ["src/app.js", "app.js"],
   ["src/argus-core.js", "argus-core.js"],
+  ["src/routines.js", "routines.js"],
   ["src/android-bridge.js", "android-bridge.js"],
   ["src/db.js", "db.js"],
   ["src/updater.js", "updater.js"],

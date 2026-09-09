@@ -47,19 +47,32 @@
 - Keep graph/review logic local and exportable.
 - Add embeddings through a local model adapter if practical on-device.
 
-## v0.6 Voice And Command Layer
+## v0.6 Command Layer — delivered
 
-- Add push-to-talk command capture.
-- Add offline speech-to-text adapter.
 - Add command parser with confirm-before-action safety.
 - Add spoken responses using Android text-to-speech.
 - Keep the first command parser deterministic and local.
 - Route unclear or external commands through safe no-op or draft-action paths.
 
-## v0.7 Phone Automation
+Push-to-talk and offline speech-to-text are still pending. The first release uses typed commands and optional speech output.
+
+## v0.7 Local Reminders And Routines
+
+- One-off, daily and weekly reminder editor.
+- Native Android notification permission and settings controls.
+- WorkManager scheduling with pause, edit, cancellation and delivery status.
+- Calendar-based repeats, daylight-saving handling and no repeated catch-up notifications.
+- Notification taps open Routines.
+- Paused backup restore and cancellation before import/wipe.
+- Web and native approval checks; bundled-content WebView boundary.
+- Development-branch APK builds and native scheduling tests before release.
+
+## Following slices
 
 - Add Android intents for safe actions.
-- Add local routines.
 - Add notification triage.
 - Add clipboard/share workflows.
 - Add background checks with clear battery limits.
+- Add a native offline speech-to-text adapter, with device capability detection and a typed-command fallback.
+
+Release signing still needs the four private GitHub Actions secrets. Debug builds remain a temporary testing path.

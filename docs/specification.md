@@ -108,10 +108,21 @@ Argus v0.6 adds the first local command layer:
 - Optional spoken command replies through browser or Android text-to-speech.
 - Offline speech-to-text remains an adapter target for a later native/local model slice.
 
-## v0.1 Non-Goals
+## v0.7 Scope
+
+- Routines screen for one-off, daily and weekly reminders.
+- Android notification permission handling and links to Android notification settings.
+- Explicit Enable to schedule a saved reminder; pause and deletion cancel pending work.
+- WorkManager runs local background notifications without a network requirement or continuous service.
+- Saved time-zone calendar repeats preserve the chosen wall-clock time.
+- Delivery status mirrors into IndexedDB; tapping a notification opens Routines.
+- Backup restore leaves reminders paused; import/wipe cancels existing native schedules.
+- Notification triage, arbitrary automation chains and offline transcription remain later work.
+
+## Current Boundaries
 
 - No cloud AI integration.
 - No paid API integration.
 - No stealth collection, covert monitoring or bypassing platform permissions.
 - No automated scraping or account actions yet.
-- No APK from this environment because the Android SDK is not installed here.
+- Android compilation runs in GitHub Actions; this workspace does not contain the Android SDK.
