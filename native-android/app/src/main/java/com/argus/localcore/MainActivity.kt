@@ -22,6 +22,8 @@ class MainActivity : Activity() {
     private var pendingSharedText: String? = null
     private var pendingReminder: String? = null
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    lateinit var offlineSpeech: OfflineSpeechController
+        private set
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,6 +91,7 @@ class MainActivity : Activity() {
                 refreshReminderUi()
             }
         }
+        offlineSpeech = OfflineSpeechController(this, ::emitSpeechEvent)
         webView.addJavascriptInterface(ArgusBridge(this), "ArgusAndroid")
 
         setContentView(webView)
@@ -108,12 +111,35 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (::offlineSpeech.isInitialized) offlineSpeech.resume()
         refreshReminderUi()
+    }
+
+    override fun onPause() {
+        if (::offlineSpeech.isInitialized) offlineSpeech.pause()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        if (::offlineSpeech.isInitialized) offlineSpeech.destroy()
+        filePathCallback?.onReceiveValue(null)
+        filePathCallback = null
+        if (::webView.isInitialized) {
+            webView.removeJavascriptInterface("ArgusAndroid")
+            webView.destroy()
+        }
+        super.onDestroy()
+    }
+
+    fun emitSpeechEvent(event: JSONObject) {
+        if (!::webView.isInitialized || isDestroyed) return
+        webView.evaluateJavascript("window.ArgusSpeechInbox?.receive(${event})", null)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == NOTIFICATION_PERMISSION_CODE) refreshReminderUi()
+        if (requestCode == SPEECH_PERMISSION_CODE && ::offlineSpeech.isInitialized) offlineSpeech.refreshState()
     }
 
     fun refreshReminderUi() {
@@ -165,5 +191,6 @@ class MainActivity : Activity() {
     companion object {
         private const val FILE_CHOOSER_REQUEST_CODE = 701
         const val NOTIFICATION_PERMISSION_CODE = 702
+        const val SPEECH_PERMISSION_CODE = 703
     }
 }

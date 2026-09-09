@@ -15,10 +15,10 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.7.0-native")
+            .put("version", "0.8.0-native")
             .put("host", "android")
-            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "local_reminder")))
-            .put("message", "Android shell attached. Local reminders are available in Routines.")
+            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "local_reminder", "offline_speech")))
+            .put("message", "Android shell attached. Reminders and on-device speech input are available to check.")
             .toString()
     }
 
@@ -69,6 +69,76 @@ class ArgusBridge(private val activity: MainActivity) {
             activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName))
         }
         JSONObject().put("status", "completed").toString()
+    }
+
+    @JavascriptInterface
+    fun getSpeechState(ignored: String): String = activity.offlineSpeech.snapshot()
+
+    @JavascriptInterface
+    fun startSpeech(payload: String): String = guarded {
+        val input = JSONObject(payload)
+        val id = checkedSpeechId(input)
+        val language = checkedSpeechLanguage(input)
+        activity.runOnUiThread { activity.offlineSpeech.start(id, language) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun stopSpeech(payload: String): String = guarded {
+        val id = checkedSpeechId(JSONObject(payload))
+        activity.runOnUiThread { activity.offlineSpeech.stop(id) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun cancelSpeech(payload: String): String = guarded {
+        val id = checkedSpeechId(JSONObject(payload))
+        activity.runOnUiThread { activity.offlineSpeech.cancel(id) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun requestSpeechPermission(ignored: String): String = guarded {
+        activity.runOnUiThread {
+            if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), MainActivity.SPEECH_PERMISSION_CODE)
+            } else activity.offlineSpeech.refreshState()
+        }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun openSpeechSettings(payload: String): String = guarded {
+        val permissions = JSONObject(payload).optBoolean("permissions")
+        activity.runOnUiThread {
+            val intent = if (permissions) Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${activity.packageName}"))
+                else Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)
+            runCatching { activity.startActivity(intent) }.onFailure {
+                activity.emitSpeechEvent(JSONObject().put("type", "notice").put("message", "Android could not open that settings screen. Open it from the phone's Settings app."))
+            }
+        }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun checkSpeechLanguage(payload: String): String = guarded {
+        val language = checkedSpeechLanguage(JSONObject(payload))
+        activity.runOnUiThread { activity.offlineSpeech.checkLanguage(language) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun downloadSpeechLanguage(payload: String): String = guarded {
+        val language = checkedSpeechLanguage(JSONObject(payload))
+        activity.runOnUiThread { activity.offlineSpeech.checkLanguage(language, download = true) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    private fun checkedSpeechId(input: JSONObject): String = input.getString("sessionId").also {
+        require(it.matches(Regex("speech-[a-zA-Z0-9-]{1,80}"))) { "Invalid speech session." }
+    }
+    private fun checkedSpeechLanguage(input: JSONObject): String = input.getString("language").also {
+        require(it.matches(Regex("[a-zA-Z]{2,8}(-[a-zA-Z0-9]{1,8})*"))) { "Choose a valid speech language." }
     }
 
     private fun guarded(block: () -> String): String = try { block() } catch (error: Exception) {

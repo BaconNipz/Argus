@@ -1,8 +1,8 @@
-# Argus v0.7.0
+# Argus v0.8.0
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
-The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.7 adds local reminders and repeating routines, with Android handling notifications while the app is closed. It needs no cloud AI or paid service. The release workflow can publish signed APKs once private signing secrets are configured.
+The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.8 adds push-to-talk command capture through Android's on-device speech recognizer, where available. Recognised text is reviewed before it is used as a command. Local reminders from v0.7 are included. The release workflow can publish signed APKs once private signing secrets are configured.
 
 ## What Argus Does Now
 
@@ -18,6 +18,9 @@ The current build has an offline web core and a native Android shell under `nati
 - Attaches local evidence files through the Android system file picker in the native APK.
 - Reviews cases through a local OSINT Workbench with timeline and link-analysis views.
 - Parses simple local commands without requiring cloud AI.
+- Captures spoken commands using Android's dedicated on-device recognizer, with a typed fallback on unsupported devices.
+- Checks microphone permission and offline language availability, and can request language-pack downloads when supported.
+- Keeps recognised speech as review text until you choose to use and run it.
 - Queues URL-opening commands for confirmation before dispatch.
 - Sends reminder commands to Routines so you can choose a time.
 - Saves one-off, daily and weekly reminders, with explicit enable, pause, edit and delete controls.
@@ -81,3 +84,5 @@ Argus v0.5 adds the first proper OSINT workbench layer: case health review, evid
 Argus v0.6 adds the first command layer. It is intentionally rule-based for now: simple commands work locally, unclear commands are rejected, and any phone/external action still goes through the action queue.
 
 Argus v0.7 adds local notification routines. See [the v0.7 guide](docs/releases/v0.7.0.md) for what changed, how to use it, and what still needs device validation.
+
+Argus v0.8 adds the first on-device speech input adapter. See [the v0.8 guide](docs/releases/v0.8.0.md) for setup, recording controls, language packs and current limits.

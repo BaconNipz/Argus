@@ -1,15 +1,15 @@
 {
   "appId": "com.argus.localcore",
-  "versionCode": 8,
-  "versionName": "0.7.0",
-  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.7.0/Argus-v0.7.0-release.apk",
+  "versionCode": 9,
+  "versionName": "0.8.0",
+  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.8.0/Argus-v0.8.0-release.apk",
   "sha256": "",
   "releaseDate": "2026-09-09",
   "notes": [
-    "Adds Routines for one-off, daily and weekly local reminders.",
-    "Schedules Android notifications after you enable a saved reminder.",
-    "Adds notification permission controls, pause, edit and delete.",
-    "Keeps daily and weekly reminders at the chosen time across daylight-saving changes.",
-    "Restored reminders stay paused until you review and enable them."
+    "Adds push-to-talk command capture through Android on-device speech recognition.",
+    "Shows recognised text for review before using or running a command.",
+    "Adds microphone permission, language checking and requested language-pack downloads.",
+    "Cancels capture on backgrounding and ignores results from cancelled sessions.",
+    "Keeps typed commands available when the device or language is unsupported."
   ]
 }

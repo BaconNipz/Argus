@@ -1,6 +1,6 @@
 import { restoreReminders } from "./routines.js";
 
-export const ARGUS_VERSION = "0.7.0";
+export const ARGUS_VERSION = "0.8.0";
 
 export const MEMORY_TYPES = ["note", "person", "project", "source", "place", "account", "task"];
 export const MEMORY_SENSITIVITY = ["normal", "sensitive", "private"];
@@ -178,6 +178,15 @@ export const MODULES = [
     localFirst: true,
     requiresAndroidBridge: false,
     description: "Parse simple local commands into memory, search, cases, sources or confirmed action drafts."
+  },
+  {
+    id: "offline-speech-input",
+    name: "Offline Speech Input",
+    category: "voice",
+    status: "ready",
+    localFirst: true,
+    requiresAndroidBridge: true,
+    description: "Capture a spoken command with Android's on-device recognizer, where available, then review the text before running it."
   },
   {
     id: "action-queue",
