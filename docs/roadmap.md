@@ -54,7 +54,7 @@
 - Keep the first command parser deterministic and local.
 - Route unclear or external commands through safe no-op or draft-action paths.
 
-Push-to-talk and offline speech-to-text are still pending. The first release uses typed commands and optional speech output.
+This first release used typed commands and optional speech output. On-device speech input is added in v0.8.
 
 ## v0.7 Local Reminders And Routines
 
@@ -67,12 +67,23 @@ Push-to-talk and offline speech-to-text are still pending. The first release use
 - Web and native approval checks; bundled-content WebView boundary.
 - Development-branch APK builds and native scheduling tests before release.
 
+## v0.8 On-device Speech Input
+
+- Push-to-talk controls in Command.
+- Android 12+ dedicated on-device recognizer, with explicit unsupported-device states.
+- Microphone permission and Android settings controls.
+- Language selection, Android 13+ language checks and user-requested model downloads.
+- Partial feedback and recognised-text review; no automatic command execution.
+- Cancel/finish controls, foreground-only capture, time limits and stale-callback protection.
+- Typed fallback, without switching to an online recognizer.
+
 ## Following slices
 
 - Add Android intents for safe actions.
 - Add notification triage.
 - Add clipboard/share workflows.
 - Add background checks with clear battery limits.
-- Add a native offline speech-to-text adapter, with device capability detection and a typed-command fallback.
+- Use device feedback to choose whether an Argus-bundled offline speech engine is needed alongside the system adapter.
+- Add native offline speech output with an explicit check that the chosen voice does not require network synthesis.
 
 Release signing still needs the four private GitHub Actions secrets. Debug builds remain a temporary testing path.

@@ -11,6 +11,7 @@ const files = [
   ["src/app.js", "app.js"],
   ["src/argus-core.js", "argus-core.js"],
   ["src/routines.js", "routines.js"],
+  ["src/speech.js", "speech.js"],
   ["src/android-bridge.js", "android-bridge.js"],
   ["src/db.js", "db.js"],
   ["src/updater.js", "updater.js"],

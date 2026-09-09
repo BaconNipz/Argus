@@ -15,6 +15,8 @@ Argus is an Android-first personal assistant, OSINT notebook and automation hub.
 | Android Shell | Local assets, share intake, files, URL actions and reminders | Kotlin WebView shell and WorkManager |
 | Local AI Runtime | Optional local LLM, transcription, embeddings and ranking | Planned |
 
+The first speech-input adapter uses Android's existing on-device recognition service. An Argus-bundled speech model and an LLM remain separate future components.
+
 ## Data Stores
 
 Argus uses these local object stores:
@@ -48,6 +50,14 @@ Each occurrence is a delayed one-time worker. Daily and weekly repeats calculate
 Import and wipe cancel native work before replacing local data. JSON restore strips scheduler authority and restores reminders paused. Native schedule preferences are excluded from Android backup/device transfer so schedules are not silently enabled on another phone. Native records take precedence over a stale IndexedDB mirror; missing native schedules become paused drafts.
 
 The WebView keeps external pages outside the bridge-bearing view. Content Security Policy restricts executable scripts to bundled assets and blocks frames and objects. Native generic action dispatch checks approval as well as the web UI.
+
+## On-device Speech Input
+
+`OfflineSpeechController` owns microphone sessions on Android's main thread. It checks `isOnDeviceRecognitionAvailable` and creates only `createOnDeviceSpeechRecognizer` instances on API 31+. There is no generic recognizer or browser speech-recognition fallback. API 33+ supports explicit language-support checks and user-requested model downloads.
+
+Each capture has a unique session ID. Both Kotlin and JavaScript reject stale and terminal-session callbacks. A recording is stopped after at most 30 seconds, with a further 10-second bound for a final result; cancel, background and destroy release the recognizer. The controller does not persist audio or transcripts.
+
+`speech.js` reduces native events into capture status and review text. Receiving a transcript never invokes the command parser or action dispatcher. The user chooses Use text, may edit it in Command, then chooses Run Command. Existing external-action approval rules still apply. The selected speech language is stored in the existing settings store; database schema remains 4.
 
 ## Module Boundary
 

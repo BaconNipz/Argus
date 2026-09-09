@@ -786,3 +786,11 @@ audio {
 .routine-notice { background: var(--routine-notice); padding: 1rem; border-radius: 12px; margin-bottom: 1.25rem; }
 .routine-notice p, .routine-help { font-size: .9rem; line-height: 1.5; }
 [data-form="reminder"] input[type="datetime-local"] { min-width: 0; max-width: 100%; }
+:root { --speech-surface: #edf3f6; }
+.speech-panel { padding: 1rem; margin: 1rem 0; border: 1px solid var(--line); border-radius: 12px; background: var(--speech-surface); }
+.speech-panel .actions { margin: .8rem 0; }
+.speech-panel p { overflow-wrap: anywhere; }
+.speech-status { font-weight: 600; }
+.speech-partial { color: var(--muted); }
+.speech-review { margin-top: 1rem; padding: 1rem; border-radius: 8px; background: white; }
+.speech-language-help summary { cursor: pointer; padding: .5rem 0; }

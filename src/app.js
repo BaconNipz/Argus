@@ -33,6 +33,7 @@ import {
 } from "./argus-core.js";
 import { dispatchNativeAction, readNativeBridgeInfo, registerNativeInbox, reminderBridge } from "./android-bridge.js";
 import { createReminder, mergeNativeReminders, toLocalDateTime } from "./routines.js";
+import { beginSpeechCapture, emptySpeechCapture, isSpeechBusy, reduceSpeechCapture, speechBridge } from "./speech.js";
 import { CURRENT_ANDROID_BUILD, DEFAULT_UPDATE_MANIFEST_URL, checkForUpdate } from "./updater.js";
 import {
   clearStore,
@@ -79,6 +80,11 @@ const state = {
   searchQuery: "",
   workbenchCaseId: "all",
   commandDraft: "",
+  speechCapture: emptySpeechCapture(),
+  speechInfo: { available: false, microphoneGranted: false },
+  speechLanguage: "",
+  speechModel: null,
+  speechNotice: "",
   lastCommand: null,
   toast: "",
   recording: null,
@@ -305,7 +311,7 @@ function renderDashboard() {
 }
 
 function renderCommand() {
-  const canSpeak = Boolean(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  const canSpeak = Boolean(window.speechSynthesis && window.SpeechSynthesisUtterance) && !isSpeechBusy(state.speechCapture);
   const last = state.lastCommand;
   return `
     <section class="band">
@@ -317,15 +323,16 @@ function renderCommand() {
         </div>
         <span class="status ready">local parser</span>
       </div>
+      ${renderSpeechCapture()}
       <form class="quick-capture" data-form="command">
         <label class="field">
           <span>Command</span>
-          <textarea class="textarea" name="command" placeholder="Try: remember that Argus should stay local-first">${escapeHtml(
+          <textarea class="textarea" name="command" ${isSpeechBusy(state.speechCapture) ? "disabled" : ""} placeholder="Try: remember that Argus should stay local-first">${escapeHtml(
             state.commandDraft
           )}</textarea>
         </label>
         <div class="actions">
-          <button class="button" type="submit">Run Command</button>
+          <button class="button" type="submit" ${isSpeechBusy(state.speechCapture) ? "disabled" : ""}>Run Command</button>
           ${
             last?.response
               ? `<button class="button secondary" type="button" data-action="speak-command" ${
@@ -381,6 +388,85 @@ function renderCommand() {
         : ""
     }
   `;
+}
+
+function hasSpeechBridge() {
+  return state.bridgeInfo.capabilities?.includes("offline_speech") && typeof window.ArgusAndroid?.getSpeechState === "function";
+}
+
+function refreshSpeechInfo() {
+  if (!hasSpeechBridge()) return;
+  try {
+    state.speechInfo = speechBridge("getSpeechState");
+    if (!state.speechLanguage) state.speechLanguage = getSettingValue("speech-language", "") || state.speechInfo.deviceLanguage || "en-AU";
+  } catch (error) { state.speechNotice = error.message; }
+}
+
+function renderSpeechCapture() {
+  const native = hasSpeechBridge();
+  const info = state.speechInfo;
+  const capture = state.speechCapture;
+  const busy = isSpeechBusy(capture);
+  const languages = new Map([[info.deviceLanguage || "en-AU", `Phone language (${info.deviceLanguage || "en-AU"})`], ["en-AU", "English (Australia)"], ["en-US", "English (United States)"], ["en-GB", "English (United Kingdom)"]]);
+  if (state.speechLanguage && !languages.has(state.speechLanguage)) languages.set(state.speechLanguage, state.speechLanguage);
+  return `<div class="speech-panel">
+    <div class="section-head"><div><h2>Speak a command</h2>
+      <p>${native ? escapeHtml(info.message || "Checking on-device speech availability…") : "Offline speech input needs the Argus v0.8 Android app. You can type commands below."}</p></div>
+      <span class="status ${info.available ? "ready" : "stub"}">${info.available ? "on-device engine" : "typing available"}</span></div>
+    ${native ? `<label class="field"><span>Spoken language</span><select class="select" data-speech-language ${busy ? "disabled" : ""}>
+      ${[...languages].map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === state.speechLanguage ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}
+    </select></label>
+    <div class="actions">
+      ${busy ? `<button class="button" type="button" data-action="stop-speech" ${capture.phase === "processing" ? "disabled" : ""}>Finish speaking</button>
+        <button class="button quiet" type="button" data-action="cancel-speech">Cancel recording</button>` :
+        `<button class="button" type="button" data-action="${info.microphoneGranted ? "start-speech" : "speech-permission"}" ${info.available ? "" : "disabled"}>${info.microphoneGranted ? "Start listening" : "Allow microphone"}</button>`}
+      <button class="button quiet" type="button" data-action="speech-settings" ${busy ? "disabled" : ""}>Android voice settings</button>
+      ${!info.microphoneGranted ? `<button class="button quiet" type="button" data-action="speech-app-settings">Argus app permissions</button>` : ""}
+    </div>
+    ${info.modelDownloadSupported ? `<details class="speech-language-help"><summary>Check or download an offline language</summary>
+      <p>A language download uses internet access. Recognition uses the on-device service.</p>
+      <div class="actions"><button class="button secondary" type="button" data-action="check-speech-language" ${busy ? "disabled" : ""}>Check language</button>
+      <button class="button quiet" type="button" data-action="download-speech-language" ${busy ? "disabled" : ""}>Request language download</button></div></details>` : ""}
+    <p class="speech-status" role="status">${escapeHtml(capture.message || "Tap Start listening, speak, then review the result. Recording ends after a pause or when you tap Finish speaking.")}</p>
+    ${capture.partial ? `<p class="speech-partial">Hearing: ${escapeHtml(capture.partial)}</p>` : ""}
+    ${state.speechModel ? `<p role="status">${escapeHtml(state.speechModel.message)}</p>` : ""}
+    ${state.speechNotice ? `<p role="status">${escapeHtml(state.speechNotice)}</p>` : ""}
+    ${capture.phase === "review" ? `<div class="speech-review"><strong>Recognised text</strong><p>${escapeHtml(capture.transcript)}</p>
+      <button class="button secondary" type="button" data-action="use-speech-text">Use text in command box</button>
+      <p>You can edit it below before tapping Run Command.</p></div>` : ""}
+    <p class="routine-help">Only records after you tap Start listening. Argus does not save command audio or run recognised text automatically.</p>` : ""}
+  </div>`;
+}
+
+function startSpeechCapture() {
+  if (isSpeechBusy(state.speechCapture)) return;
+  if (state.recording) throw new Error("Stop the voice-note recording before starting a spoken command.");
+  state.speechNotice = "";
+  window.speechSynthesis?.cancel();
+  state.speechCapture = beginSpeechCapture(`speech-${crypto.randomUUID()}`);
+  try { speechBridge("startSpeech", { sessionId: state.speechCapture.sessionId, language: state.speechLanguage }); }
+  catch (error) { state.speechCapture = reduceSpeechCapture(state.speechCapture, { type: "error", sessionId: state.speechCapture.sessionId, message: error.message }); }
+  render();
+}
+
+function cancelSpeechCapture() {
+  if (!isSpeechBusy(state.speechCapture)) return;
+  const sessionId = state.speechCapture.sessionId;
+  state.speechCapture = reduceSpeechCapture(state.speechCapture, { type: "cancelled", sessionId, message: "Recording cancelled. Your typed command is unchanged." });
+  try { speechBridge("cancelSpeech", { sessionId }); }
+  catch (error) { state.speechNotice = error.message; }
+}
+
+function receiveSpeechEvent(event) {
+  if (!event || typeof event !== "object") return;
+  if (event.type === "capabilities") {
+    state.speechInfo = event;
+    if (!state.speechLanguage) state.speechLanguage = event.deviceLanguage || "en-AU";
+  } else if (event.type === "model") {
+    if (event.language === state.speechLanguage) state.speechModel = event;
+  } else if (event.type === "notice") state.speechNotice = event.message || "";
+  else state.speechCapture = reduceSpeechCapture(state.speechCapture, event);
+  if (state.dbReady && state.activeView === "command") render();
 }
 
 function hasReminderBridge() {
@@ -1522,6 +1608,7 @@ async function getOrCreateInboxInvestigation() {
 }
 
 async function handleCommand(form) {
+  if (isSpeechBusy(state.speechCapture)) throw new Error("Finish or cancel speech capture before running a command.");
   const commandText = String(new FormData(form).get("command") || "").trim();
   state.commandDraft = commandText;
   const parsed = parseArgusCommand(commandText);
@@ -2017,6 +2104,7 @@ async function dispatchAction(id) {
 app.addEventListener("click", async (event) => {
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) {
+    if (viewButton.dataset.view !== "command") cancelSpeechCapture();
     state.activeView = viewButton.dataset.view;
     render();
     return;
@@ -2027,6 +2115,25 @@ app.addEventListener("click", async (event) => {
 
   const { action, id } = actionButton.dataset;
   try {
+  if (action === "start-speech") startSpeechCapture();
+  if (action === "stop-speech") {
+    const sessionId = state.speechCapture.sessionId;
+    state.speechCapture = reduceSpeechCapture(state.speechCapture, { type: "processing", sessionId });
+    speechBridge("stopSpeech", { sessionId });
+    render();
+  }
+  if (action === "cancel-speech") { cancelSpeechCapture(); render(); }
+  if (action === "speech-permission") speechBridge("requestSpeechPermission");
+  if (action === "speech-settings") speechBridge("openSpeechSettings");
+  if (action === "speech-app-settings") speechBridge("openSpeechSettings", { permissions: true });
+  if (action === "check-speech-language" || action === "download-speech-language") {
+    speechBridge(action === "check-speech-language" ? "checkSpeechLanguage" : "downloadSpeechLanguage", { language: state.speechLanguage });
+  }
+  if (action === "use-speech-text" && state.speechCapture.phase === "review") {
+    state.commandDraft = state.speechCapture.transcript;
+    state.speechCapture = emptySpeechCapture();
+    setToast("Text added. Review or edit it, then tap Run Command.");
+  }
   if (["enable-reminder", "pause-reminder", "edit-reminder", "delete-reminder"].includes(action)) {
     await routineChange(() => changeReminder(action, id));
   }
@@ -2039,6 +2146,9 @@ app.addEventListener("click", async (event) => {
     render();
   }
   if (action === "clear-command") {
+    cancelSpeechCapture();
+    state.speechCapture = emptySpeechCapture();
+    state.speechNotice = "";
     state.commandDraft = "";
     state.lastCommand = null;
     render();
@@ -2047,6 +2157,7 @@ app.addEventListener("click", async (event) => {
     speakCommandResponse();
   }
   if (action === "use-command-example") {
+    cancelSpeechCapture();
     state.commandDraft = actionButton.dataset.command || "";
     state.activeView = "command";
     render();
@@ -2114,6 +2225,15 @@ app.addEventListener("click", async (event) => {
 app.addEventListener("input", (event) => {
   const form = event.target.closest('[data-form="reminder"]');
   if (form && event.target.name) state.reminderDraft[event.target.name] = event.target.value;
+  if (event.target.closest('[data-form="command"]') && event.target.name === "command") state.commandDraft = event.target.value;
+});
+
+app.addEventListener("change", async (event) => {
+  if (!event.target.matches("[data-speech-language]")) return;
+  state.speechLanguage = event.target.value;
+  state.speechModel = null;
+  try { await saveSetting("speech-language", state.speechLanguage); }
+  catch (error) { state.speechNotice = error.message; }
 });
 
 app.addEventListener("submit", async (event) => {
@@ -2158,6 +2278,7 @@ async function init() {
       navigator.serviceWorker.register("./service-worker.js").catch(() => {});
     }
     registerNativeInbox(async (text) => {
+      cancelSpeechCapture();
       state.sharedDraft = text;
       state.activeView = "dashboard";
       if (state.dbReady) {
@@ -2169,6 +2290,8 @@ async function init() {
     await ensureSeedData();
     await loadData();
     await refreshReminders();
+    state.speechLanguage = getSettingValue("speech-language", "") || state.speechLanguage;
+    refreshSpeechInfo();
     await handleSharedLaunch();
     state.dbReady = true;
     render();
@@ -2184,14 +2307,23 @@ async function init() {
 }
 
 window.ArgusOpenReminder = () => {
+  cancelSpeechCapture();
   state.activeView = "routines";
   if (state.dbReady) render();
   return true;
 };
 window.addEventListener("argus-native-resume", async () => {
+  cancelSpeechCapture();
+  refreshSpeechInfo();
+  if (state.speechModel?.state === "checking") state.speechModel = { state: "unknown", message: "The language check was interrupted. Tap Check language again." };
   if (!state.dbReady || state.routineBusy) return;
   await routineChange(refreshReminders);
   if (state.activeView === "routines") render();
+});
+
+window.ArgusSpeechInbox = { receive: receiveSpeechEvent };
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) cancelSpeechCapture();
 });
 
 init();

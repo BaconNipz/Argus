@@ -119,6 +119,17 @@ Argus v0.6 adds the first local command layer:
 - Backup restore leaves reminders paused; import/wipe cancels existing native schedules.
 - Notification triage, arbitrary automation chains and offline transcription remain later work.
 
+## v0.8 Scope
+
+- Push-to-talk spoken command capture through Android's dedicated on-device speech-recognition API.
+- Explicit microphone permission, recognizer availability, language selection and optional language-pack setup.
+- Review recognised text, then copy it into the command editor and run it explicitly.
+- No automatic parsing or dispatch on a speech callback.
+- Foreground-only bounded sessions, recognizer teardown and cancelled/stale callback rejection.
+- No Argus-owned audio file is created for command capture.
+- Browser and unsupported-device users retain typed commands.
+- Existing voice-note recording is separate; saved audio-file transcription and a bundled speech engine remain future work.
+
 ## Current Boundaries
 
 - No cloud AI integration.
