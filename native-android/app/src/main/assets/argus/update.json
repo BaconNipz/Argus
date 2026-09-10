@@ -1,15 +1,15 @@
 {
   "appId": "com.argus.localcore",
-  "versionCode": 12,
-  "versionName": "0.11.0",
-  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.11.0/Argus-v0.11.0-release.apk",
+  "versionCode": 13,
+  "versionName": "0.12.0",
+  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.12.0/Argus-v0.12.0-release.apk",
   "sha256": "",
   "releaseDate": "2026-09-10",
   "notes": [
-    "Adds Snooze 10 min and Done to reminder notifications and active Routines alerts.",
-    "Keeps the usual daily/weekly time when an occurrence is snoozed or completed.",
-    "Ignores old or duplicate notification actions after edits, cancellation or handling.",
-    "Shows snooze return times and the latest action in Routines.",
-    "Includes v0.9 reminder alert settings and offline spoken replies."
+    "Open Command from an Android home-screen shortcut or Quick Settings tile.",
+    "Add access points from Command, with launcher support and tile request feedback.",
+    "Keep typed commands during a warm launch; wait for startup and active backup operations.",
+    "Tap Start listening after opening Command. Shortcuts never start recording or run text.",
+    "Includes phone backup review, broader English commands and reminder-time drafts from v0.11."
   ]
 }

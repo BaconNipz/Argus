@@ -21,6 +21,9 @@ class MainActivity : Activity() {
     private lateinit var assetLoader: WebViewAssetLoader
     private var pendingSharedText: String? = null
     private var pendingReminder: String? = null
+    private val commandLaunch = CommandLaunchQueue()
+    @Volatile var commandAccessForeground = false
+        private set
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     lateinit var backupDocuments: BackupDocumentController
         private set
@@ -28,10 +31,13 @@ class MainActivity : Activity() {
         private set
     lateinit var offlineTts: OfflineTtsController
         private set
+    lateinit var commandAccess: CommandAccessController
+        private set
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        commandLaunch.initialize(intent?.action, savedInstanceState != null, savedInstanceState?.getString(COMMAND_LAUNCH_STATE))
 
         webView = WebView(this)
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
@@ -102,6 +108,7 @@ class MainActivity : Activity() {
         backupDocuments = BackupDocumentController(this)
         offlineSpeech = OfflineSpeechController(this, ::emitSpeechEvent)
         offlineTts = OfflineTtsController(this, ::emitTtsEvent)
+        commandAccess = CommandAccessController(this)
         webView.addJavascriptInterface(ArgusBridge(this), "ArgusAndroid")
 
         setContentView(webView)
@@ -113,6 +120,7 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        commandLaunch.accept(intent?.action)
         pendingSharedText = extractSharedText(intent)
         pendingReminder = intent?.getStringExtra("argus_reminder")
         flushPendingShare()
@@ -121,18 +129,23 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        commandAccessForeground = true
+        if (::commandAccess.isInitialized) commandAccess.refresh(publish = true)
         if (::offlineSpeech.isInitialized) offlineSpeech.resume()
         if (::offlineTts.isInitialized) offlineTts.resume()
         refreshReminderUi()
     }
 
     override fun onPause() {
+        commandAccessForeground = false
         if (::offlineSpeech.isInitialized) offlineSpeech.pause()
         if (::offlineTts.isInitialized) offlineTts.pause()
         super.onPause()
     }
 
     override fun onDestroy() {
+        commandAccessForeground = false
+        if (::commandAccess.isInitialized) commandAccess.destroy()
         if (::backupDocuments.isInitialized) backupDocuments.destroy()
         if (::offlineSpeech.isInitialized) offlineSpeech.destroy()
         if (::offlineTts.isInitialized) offlineTts.destroy()
@@ -143,6 +156,23 @@ class MainActivity : Activity() {
             webView.destroy()
         }
         super.onDestroy()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        commandLaunch.peek()?.let { outState.putString(COMMAND_LAUNCH_STATE, it) }
+        super.onSaveInstanceState(outState)
+    }
+
+    fun pendingCommandLaunch(): String = JSONObject().apply {
+        commandLaunch.peek()?.let { put("requestId", it) }
+    }.toString()
+
+    fun consumeCommandLaunch(id: String): Boolean =
+        commandAccessForeground && commandLaunch.consume(id)
+
+    fun emitCommandAccessEvent(snapshot: String) {
+        if (!::webView.isInitialized || isDestroyed) return
+        webView.evaluateJavascript("window.ArgusCommandAccessInbox?.receive($snapshot)", null)
     }
 
     fun emitSpeechEvent(event: JSONObject) {
@@ -162,7 +192,7 @@ class MainActivity : Activity() {
     }
 
     fun refreshReminderUi() {
-        if (!::webView.isInitialized) return
+        if (!::webView.isInitialized || isDestroyed) return
         val reminder = pendingReminder
         if (reminder != null) {
             webView.evaluateJavascript("window.ArgusOpenReminder?.(${JSONObject.quote(reminder)})") { result ->
@@ -212,6 +242,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val COMMAND_LAUNCH_STATE = "argus.pendingCommandLaunch"
         private const val FILE_CHOOSER_REQUEST_CODE = 701
         const val NOTIFICATION_PERMISSION_CODE = 702
         const val SPEECH_PERMISSION_CODE = 703

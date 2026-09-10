@@ -1,4 +1,8 @@
 <resources>
     <string name="app_name">Argus</string>
+    <string name="command_shortcut_label">Command</string>
+    <string name="command_shortcut_long_label">Open Argus Command</string>
+    <string name="command_tile_label">Argus</string>
+    <string name="command_tile_description">Open Command. Tap Start listening to record.</string>
+    <string name="command_launch_failed">Android could not open Command. Open Argus from your home screen and try again.</string>
 </resources>
-
