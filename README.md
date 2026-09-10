@@ -1,8 +1,8 @@
-# Argus v0.9.0
+# Argus v0.10.0
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
-The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.9 improves reminder alerts and adds spoken replies with installed offline Android voices. The v0.8 spoken-command capture and review flow is included. The release workflow can publish signed APKs once private signing secrets are configured.
+The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.10 adds Snooze and Done controls to reminder notifications, keeping the regular routine time intact. The v0.9 alert settings and offline spoken replies are included. The release workflow can publish signed APKs once private signing secrets are configured.
 
 ## What Argus Does Now
 
@@ -25,6 +25,7 @@ The current build has an offline web core and a native Android shell under `nati
 - Sends reminder commands to Routines so you can choose a time.
 - Saves one-off, daily and weekly reminders, with explicit enable, pause, edit and delete controls.
 - Uses Android notifications and background scheduling in the APK; browser reminders remain saved drafts.
+- Handles reminder occurrences from notifications or Routines with Snooze 10 min and Done, without disabling regular repeats.
 - Shows notification permission, sound mode, category sound/banner settings and delivery status, with a test-alert button. Battery saving may delay delivery.
 - Restores reminders from backups in a paused state.
 - Speaks command replies using an installed voice Android marks as offline, with voice selection, test and stop controls.
@@ -88,3 +89,5 @@ Argus v0.7 adds local notification routines. See [the v0.7 guide](docs/releases/
 Argus v0.8 adds the first on-device speech input adapter. See [the v0.8 guide](docs/releases/v0.8.0.md) for setup, recording controls, language packs and current limits.
 
 Argus v0.9 fixes reminder alert defaults and adds native offline spoken replies. See [the v0.9 guide](docs/releases/v0.9.0.md), including the settings step for existing notification categories.
+
+Argus v0.10 adds notification actions. See [the v0.10 guide](docs/releases/v0.10.0.md) for snooze timing, completion and repeat behaviour.

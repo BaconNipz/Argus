@@ -10,7 +10,10 @@ class ReminderWorker(context: Context, params: WorkerParameters) : Worker(contex
         val revision = inputData.getString("revision") ?: return Result.failure()
         val due = inputData.getString("due") ?: return Result.failure()
         return try {
-            ReminderScheduler(applicationContext).fire(id, revision, due)
+            val scheduler = ReminderScheduler(applicationContext)
+            val snoozeToken = inputData.getString("snoozeToken")
+            if (snoozeToken == null) scheduler.fire(id, revision, due)
+            else scheduler.fireSnooze(id, revision, due, snoozeToken)
             Result.success()
         } catch (_: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()

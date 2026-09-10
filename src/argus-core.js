@@ -1,6 +1,6 @@
 import { restoreReminders } from "./routines.js";
 
-export const ARGUS_VERSION = "0.9.0";
+export const ARGUS_VERSION = "0.10.0";
 
 export const MEMORY_TYPES = ["note", "person", "project", "source", "place", "account", "task"];
 export const MEMORY_SENSITIVITY = ["normal", "sensitive", "private"];

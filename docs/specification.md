@@ -139,6 +139,16 @@ Argus v0.6 adds the first local command layer:
 - No implicit voice download or online synthesis fallback. Android settings manage engine and voice installation.
 - Playback stops on microphone capture, navigation, backgrounding or audio focus loss; late callbacks cannot restart it.
 
+## v0.10 Scope
+
+- Snooze 10 min and Done actions on newly posted reminder notifications, with matching Routines controls.
+- Done affects the current occurrence; Pause remains the control for stopping future repeats.
+- Snoozes have their own pending work and do not shift the routine's regular time.
+- A newer regular occurrence supersedes a delayed snooze of an older occurrence.
+- Notification actions validate revision and alert tokens, consume authority once and reject stale callbacks.
+- Import, wipe, pause, edit and deletion cannot leave an old action capable of reactivating a reminder.
+- No new permissions, cloud service or database schema change.
+
 ## Current Boundaries
 
 - No cloud AI integration.
