@@ -32,7 +32,7 @@ import {
   summarizeStats
 } from "./argus-core.js";
 import { dispatchNativeAction, readNativeBridgeInfo, registerNativeInbox, reminderBridge } from "./android-bridge.js";
-import { createReminder, mergeNativeReminders, toLocalDateTime } from "./routines.js";
+import { canHandleReminderAlert, createReminder, mergeNativeReminders, toLocalDateTime } from "./routines.js";
 import { beginSpeechCapture, emptySpeechCapture, isSpeechBusy, reduceSpeechCapture, speechBridge } from "./speech.js";
 import { beginSpeechOutput, emptySpeechOutput, isOutputBusy, reduceSpeechOutput, ttsBridge } from "./speech-output.js";
 import { notificationAdvice } from "./notification-status.js";
@@ -548,7 +548,8 @@ function renderRoutines() {
   return `
     <section class="band">
       <div class="section-head"><div><p class="eyebrow">On this phone</p><h1>Reminders and routines</h1>
-        <p>Save a reminder, check its time, then enable it. Argus can notify you once, daily or weekly.</p></div></div>
+        <p>Save a reminder, check its time, then enable it. Argus can notify you once, daily or weekly.</p>
+        <p>Expand a reminder notification to use Snooze 10 min or Done. Done handles that occurrence; Pause stops future repeats.</p></div></div>
       <div class="routine-notice" role="status">
         <strong>${native ? (state.reminderPermission ? "Notifications are enabled" : "Notifications are off") : "Save here; schedule in the Android app"}</strong>
         <p>${native ? "Android handles delivery while Argus is closed. Battery saving, force-stop or a powered-off phone can delay reminders. These are approximate reminders; use your phone alarm for exact timing." : "The browser can save and edit reminders. Background notifications need the Argus v0.7 Android APK."}</p>
@@ -587,10 +588,14 @@ function renderRoutines() {
         <header><div><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.repeat)} · ${escapeHtml(formatDate(item.nextRunAt))} (phone time)</p></div>
           <span class="status ${item.enabled ? "ready" : "stub"}">${escapeHtml(item.status || "paused")}</span></header>
         ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}
+        ${item.snoozedUntil ? `<p><strong>Snoozed until ${escapeHtml(formatDate(item.snoozedUntil))}</strong>${item.repeat !== "once" ? `. Next regular reminder: ${escapeHtml(formatDate(item.nextRunAt))}.` : "."}</p>` : ""}
         <p class="routine-help">Repeat time zone: ${escapeHtml(item.timeZone || "UTC")}</p>
         ${item.lastResult ? `<p>${escapeHtml(item.lastResult)}</p>` : ""}
         ${item.lastFiredAt ? `<p>Last notification posted: ${escapeHtml(formatDate(item.lastFiredAt))}</p>` : ""}
+        ${item.lastActionAt ? `<p>Last handled: ${escapeHtml(item.lastAction === "snooze" ? "Snoozed" : "Done")} · ${escapeHtml(formatDate(item.lastActionAt))}</p>` : ""}
         <div class="actions">
+          ${native && typeof window.ArgusAndroid?.actOnReminderNotification === "function" && canHandleReminderAlert(item) ?
+            ["snooze", "done"].map((operation) => `<button class="button secondary" data-action="handle-reminder-alert" data-operation="${operation}" data-id="${escapeHtml(item.id)}" data-revision="${escapeHtml(item.revision)}" data-token="${escapeHtml(item.notificationToken)}">${operation === "snooze" ? "Snooze 10 min" : "Done"}</button>`).join("") : ""}
           ${item.enabled ? `<button class="button secondary" data-action="pause-reminder" data-id="${escapeHtml(item.id)}">Pause</button>` :
             `<button class="button" data-action="enable-reminder" data-id="${escapeHtml(item.id)}" ${native ? "" : "disabled"}>Enable reminder</button>`}
           <button class="button quiet" data-action="edit-reminder" data-id="${escapeHtml(item.id)}">Edit</button>
@@ -2213,6 +2218,15 @@ app.addEventListener("click", async (event) => {
   }
   if (["enable-reminder", "pause-reminder", "edit-reminder", "delete-reminder"].includes(action)) {
     await routineChange(() => changeReminder(action, id));
+  }
+  if (action === "handle-reminder-alert") {
+    // Use the authority from the button that was tapped, never a newer alert obtained during refresh.
+    const payload = { id, revision: actionButton.dataset.revision, notificationToken: actionButton.dataset.token, action: actionButton.dataset.operation };
+    await routineChange(async () => {
+      const result = reminderBridge("actOnReminderNotification", payload);
+      await refreshReminders();
+      setToast(result.message);
+    });
   }
   if (action === "clear-reminder-draft") { state.reminderDraft = {}; render(); }
   if (action === "reminder-permission") reminderBridge("requestReminderPermission");

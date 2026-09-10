@@ -86,6 +86,16 @@ This first release used typed commands and optional speech output. On-device spe
 - Reject network-only or not-installed voices, handle audio focus and stop output for capture/backgrounding.
 - User confirmed reminder delivery in v0.7/v0.8; v0.9 sound, banners and spoken output still need phone validation.
 
+## v0.10 Reminder Notification Actions
+
+- Snooze 10 min and Done buttons on newly posted reminder notifications and active alerts in Routines.
+- Separate snooze scheduling so daily/weekly reminder times do not drift.
+- Done completes a one-off or handles the current repeat occurrence while keeping the routine enabled.
+- New regular occurrences supersede older snoozes.
+- Revision/alert tokens protect edited, paused, deleted and already-handled reminders from old actions.
+- Restore remains paused and removes all active alert/snooze authority.
+- User reported v0.9 working on the phone; v0.10's new action behaviour still needs device validation.
+
 ## Following slices
 
 - Add Android intents for safe actions.
@@ -93,6 +103,6 @@ This first release used typed commands and optional speech output. On-device spe
 - Add clipboard/share workflows.
 - Add background checks with clear battery limits.
 - Use device feedback to choose whether an Argus-bundled offline speech engine is needed alongside the system adapter.
-- Add reminder notification actions such as snooze and done, informed by device testing.
+- Improve Android backup/export through the system document picker and validate restoration across development builds.
 
 Release signing still needs the four private GitHub Actions secrets. Debug builds remain a temporary testing path.

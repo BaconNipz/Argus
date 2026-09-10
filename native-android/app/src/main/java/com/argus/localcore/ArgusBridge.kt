@@ -15,7 +15,7 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.9.0-native")
+            .put("version", "0.10.0-native")
             .put("host", "android")
             .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "local_reminder", "offline_speech", "offline_tts")))
             .put("message", "Android shell attached. Reminder alerts and on-device speech input/output are available to check.")
@@ -47,6 +47,9 @@ class ArgusBridge(private val activity: MainActivity) {
 
     @JavascriptInterface
     fun cancelReminder(payload: String): String = guarded { reminders.cancel(JSONObject(payload)).toString() }
+
+    @JavascriptInterface
+    fun actOnReminderNotification(payload: String): String = guarded { reminders.actOnNotification(JSONObject(payload)).toString() }
 
     @JavascriptInterface
     fun clearReminders(ignored: String): String = guarded { reminders.clear().toString() }

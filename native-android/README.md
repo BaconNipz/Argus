@@ -1,6 +1,6 @@
 # Argus Native Android Shell
 
-Argus v0.9 uses a native Kotlin WebView shell, WorkManager reminders, on-device speech input and offline voice output. APKs and native unit tests build through GitHub Actions or Android Studio; the development workspace does not contain the Android SDK.
+Argus v0.10 uses a native Kotlin WebView shell, WorkManager reminders with notification actions, on-device speech input and offline voice output. APKs and native unit tests build through GitHub Actions or Android Studio; the development workspace does not contain the Android SDK.
 
 ## Target Stack
 
@@ -56,8 +56,10 @@ The scaffold now includes:
 - A review-only speech bridge with unique capture sessions, explicit permission and lifecycle cancellation.
 - Reminder sound/banner diagnostics, direct channel settings, high-importance defaults for new channels and a test-alert button.
 - `OfflineTtsController` for installed offline voices, audio focus, capture/background cancellation and no browser speech fallback.
+- `ReminderActionReceiver` and `ReminderActionWorker` for immutable Snooze/Done actions, validated against current native records.
+- Separate snooze work with regular-occurrence precedence, cancellation and duplicate-action protection.
 
-Native tests: `gradle -p native-android testDebugUnitTest assembleDebug` from the repository root. See `docs/releases/v0.9.0.md` for behaviour and physical-device checks.
+Native tests: `gradle -p native-android testDebugUnitTest assembleDebug` from the repository root. See `docs/releases/v0.10.0.md` for behaviour and physical-device checks.
 
 Before opening the native project, run:
 

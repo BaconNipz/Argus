@@ -47,14 +47,25 @@ export function restoreReminders(records) {
 export function mergeNativeReminders(local, native) {
   const records = new Map(local.map((item) => [item.id, { ...item }]));
   for (const item of records.values()) {
-    if (item.enabled && !native.some((other) => other.id === item.id)) {
-      item.enabled = false;
-      item.status = "paused";
-      item.lastResult = "No Android schedule found. Review the time and enable again.";
+    if (!native.some((other) => other.id === item.id)) {
+      if (item.enabled) {
+        item.enabled = false;
+        item.status = "paused";
+        item.lastResult = "No Android schedule found. Review the time and enable again.";
+      }
+      item.notificationToken = "";
+      item.snoozeToken = "";
+      item.snoozedUntil = "";
     }
   }
-  for (const item of native) records.set(item.id, { ...records.get(item.id), ...item });
+  for (const item of native) records.set(item.id, { ...records.get(item.id), ...item,
+    notificationToken: item.notificationToken || "", snoozeToken: item.snoozeToken || "", snoozedUntil: item.snoozedUntil || "" });
   return [...records.values()];
+}
+
+export function canHandleReminderAlert(item) {
+  return Boolean(item?.revision && item?.notificationToken && ["notified", "scheduled"].includes(item.status) &&
+    (item.repeat === "once" || item.enabled));
 }
 
 export function toLocalDateTime(iso) {

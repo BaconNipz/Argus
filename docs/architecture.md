@@ -53,6 +53,14 @@ The WebView keeps external pages outside the bridge-bearing view. Content Securi
 
 Reminder alerts use the existing `argus_reminders` notification channel. New channels request `IMPORTANCE_HIGH`, the system notification sound and vibration. Existing channel preferences are preserved; Argus links directly to channel settings instead of replacing the channel. Each recurring occurrence uses `setOnlyAlertOnce(false)`, so an undismissed earlier card does not suppress its alert. The test button uses the same notification builder without creating a schedule. Status reads current importance, sound, vibration, ringer mode, notification volume and Do Not Disturb; it cannot confirm that Samsung displayed a banner.
 
+## Reminder Notification Actions
+
+Each posted reminder has a fresh notification token scoped to its current native revision. Explicit immutable broadcast PendingIntents include the reminder ID, revision, token and operation in their URI identity. A non-exported `ReminderActionReceiver` uses a short asynchronous handoff to WorkManager; `ReminderActionWorker` performs the state transition under the same native lock as scheduling and cancellation. The first valid action consumes the alert token. Duplicate or stale actions cannot dismiss or change a newer alert.
+
+Snoozes use separate unique work and their own token/due-time checks. Repeats retain `nextRunAt` as the next regular occurrence; one-offs expose the snooze time there. A new regular occurrence invalidates an older snooze. If a delayed snooze runs after the next regular time, it delegates to regular delivery instead of posting the old occurrence. Done clears the current card, finishes a one-off, and leaves a repeating schedule enabled. Native state includes optional `notificationToken`, `snoozeToken`, `snoozedUntil`, `lastAction` and `lastActionAt` fields without changing IndexedDB schema 4.
+
+Pausing/editing/deleting clears alert authority and cancels regular and snooze work. All work, including action handoffs, shares the cancellation tag used by import/wipe. Restore uses an explicit field allowlist, omits active tokens and restores paused drafts. Native mirrors explicitly clear absent token fields so older or missing native records cannot leave usable-looking actions in local storage. Routines actions use the exact token from the tapped button rather than replacing it with authority from a newly refreshed alert.
+
 ## On-device Speech Input
 
 `OfflineSpeechController` owns microphone sessions on Android's main thread. It checks `isOnDeviceRecognitionAvailable` and creates only `createOnDeviceSpeechRecognizer` instances on API 31+. There is no generic recognizer or browser speech-recognition fallback. API 33+ supports explicit language-support checks and user-requested model downloads.
