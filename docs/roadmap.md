@@ -108,6 +108,16 @@ This first release used typed commands and optional speech output. On-device spe
 - Keep tap-to-speak; dedicated offline wake detection needs a separate device/battery prototype.
 - New file-picker and command behavior still needs phone validation.
 
+## v0.12 Command Access
+
+- Publish a Command shortcut in Android launchers that support app shortcuts.
+- Offer a home-screen pin request from Command, with honest request/pinned status.
+- Open Command from an Argus Quick Settings tile, with unlock required on locked devices.
+- Offer Android 13+ tile setup prompts and manual Edit instructions on older devices.
+- Wait for local startup and active backup/command operations; consume a launch once and reject stale requests.
+- Preserve a typed draft during a warm launch; never start the microphone or execute intent text.
+- Launcher, tile, lock-screen and interrupted-picker behavior still needs phone validation.
+
 ## Following slices
 
 - Add Android intents for safe actions.
@@ -115,7 +125,7 @@ This first release used typed commands and optional speech output. On-device spe
 - Add clipboard/share workflows.
 - Add background checks with clear battery limits.
 - Use device feedback to choose whether an Argus-bundled offline speech engine is needed alongside the system adapter.
-- Add a convenient shortcut to Command and evaluate a separately opt-in offline wake-detector prototype.
+- Evaluate a separately opt-in offline wake-detector prototype, including microphone lifecycle, accidental triggers and phone battery use.
 - Validate backup restoration across development builds on the phone and refine format/error handling from feedback.
 
 Release signing still needs the four private GitHub Actions secrets. Debug builds remain a temporary testing path.

@@ -65,6 +65,14 @@ Native tests: `gradle -p native-android testDebugUnitTest assembleDebug` from th
 
 `BackupStaging` accepts bounded ordered chunks into private cache storage. `BackupDocumentController` opens `ACTION_CREATE_DOCUMENT`, writes on a worker thread, and reopens the result to verify byte count and SHA-256 before reporting success. The WebView opens restore/evidence files with `ACTION_OPEN_DOCUMENT`. Both pickers request local documents; no broad storage permission is added. Interrupted or failed saves must be repeated. Backups are unencrypted JSON up to 64 MiB. See `docs/releases/v0.11.0.md` for use, restore behavior and the wake-phrase decision.
 
+## v0.12 Command Access
+
+`CommandAccessController` publishes the dynamic `argus-command` launcher shortcut and handles explicit pin/tile setup requests on the activity thread. Pin acceptance is not proof of placement; pinned shortcuts are checked separately. Android 13+ returns tile setup results, with a bounded wait and manual setup guidance on errors or older versions.
+
+`CommandTileService` requires the system's `BIND_QUICK_SETTINGS_TILE` binding permission, uses an explicit immutable activity PendingIntent on API 34+, and calls `unlockAndRun` if locked. The tile is an inactive entry point, not a listening toggle. It has no microphone or foreground-service code. Both entry points use an explicit `OPEN_COMMAND` action with `NEW_TASK | SINGLE_TOP | CLEAR_TOP` to reuse MainActivity. A system picker above the activity may be cancelled when the task is brought forward.
+
+`CommandLaunchQueue` accepts only that action, generates its own token and never reads intent extras. The WebView consumes a matching token only when visible, started and not busy with a backup/routine/command operation. Native consumption also requires the resumed activity. Other new intents invalidate pending Command launches. Saved-instance state carries only an unconsumed request; recreating an already-consumed intent does not replay it. A warm launch retains the typed draft; process death/recreation does not persist unsaved drafts. See `docs/releases/v0.12.0.md` for phone tests.
+
 Before opening the native project, run:
 
 ```bash

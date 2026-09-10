@@ -15,11 +15,41 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.11.0-native")
+            .put("version", "0.12.0-native")
             .put("host", "android")
-            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts")))
+            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts", "command_access")))
             .put("message", "Android shell attached. Reminder alerts and on-device speech input/output are available to check.")
             .toString()
+    }
+
+    @JavascriptInterface
+    fun getCommandAccessState(ignored: String): String = activity.commandAccess.snapshot()
+
+    @JavascriptInterface
+    fun refreshCommandAccess(ignored: String): String = guarded {
+        activity.runOnUiThread { activity.commandAccess.refresh(publish = true) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun pinCommandShortcut(ignored: String): String = guarded {
+        activity.runOnUiThread { activity.commandAccess.requestPin() }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun addCommandTile(ignored: String): String = guarded {
+        activity.runOnUiThread { activity.commandAccess.requestTile() }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun getPendingCommandLaunch(ignored: String): String = activity.pendingCommandLaunch()
+
+    @JavascriptInterface
+    fun consumeCommandLaunch(payload: String): String = guarded {
+        val id = JSONObject(payload).getString("requestId")
+        JSONObject().put("consumed", activity.consumeCommandLaunch(id)).toString()
     }
 
     @JavascriptInterface

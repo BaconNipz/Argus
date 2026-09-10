@@ -1,8 +1,8 @@
-# Argus v0.11.0
+# Argus v0.12.0
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
-The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.11 adds Android document backups with restore review, and broader English commands with reminder-time drafts. Snooze, Done and offline speech input/output remain available. The release workflow can publish signed APKs once private signing secrets are configured.
+The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.12 adds a home-screen shortcut and Quick Settings tile that open Command directly. The Command screen includes setup controls and support feedback. Phone backups, broader English commands, reminders and offline speech input/output remain available. The release workflow can publish signed APKs once private signing secrets are configured.
 
 ## What Argus Does Now
 
@@ -21,6 +21,7 @@ The current build has an offline web core and a native Android shell under `nati
 - Captures spoken commands using Android's dedicated on-device recognizer, with a typed fallback on unsupported devices.
 - Checks microphone permission and offline language availability, and can request language-pack downloads when supported.
 - Keeps recognised speech as review text until you choose to use and run it.
+- Opens Command from a pinned home-screen shortcut, the app icon's long-press menu or a Quick Settings tile. Recording still starts with an explicit tap.
 - Queues URL-opening commands for confirmation before dispatch.
 - Interprets supported spoken or typed reminder times, then opens Routines for review, saving and explicit enabling.
 - Saves one-off, daily and weekly reminders, with explicit enable, pause, edit and delete controls.
@@ -93,3 +94,5 @@ Argus v0.9 fixes reminder alert defaults and adds native offline spoken replies.
 Argus v0.10 adds notification actions. See [the v0.10 guide](docs/releases/v0.10.0.md) for snooze timing, completion and repeat behaviour.
 
 Argus v0.11 adds phone backup and broader commands. See [the v0.11 guide](docs/releases/v0.11.0.md) for examples, restoring data and the current wake-phrase decision.
+
+Argus v0.12 adds quicker access to Command. See [the v0.12 guide](docs/releases/v0.12.0.md) for shortcut/tile setup, phone checks and current limits.

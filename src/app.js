@@ -37,6 +37,7 @@ import { beginSpeechCapture, emptySpeechCapture, isSpeechBusy, reduceSpeechCaptu
 import { beginSpeechOutput, emptySpeechOutput, isOutputBusy, reduceSpeechOutput, ttsBridge } from "./speech-output.js";
 import { notificationAdvice } from "./notification-status.js";
 import { localStatusReply } from "./command-language.js";
+import { commandAccessAvailable, commandAccessBridge, takeCommandLaunch } from "./command-access.js";
 import { MAX_BACKUP_BYTES, nativeBackupAvailable, readBackupFile, saveNativeBackup } from "./backup.js";
 import { CURRENT_ANDROID_BUILD, DEFAULT_UPDATE_MANIFEST_URL, checkForUpdate } from "./updater.js";
 import {
@@ -96,6 +97,8 @@ const state = {
   ttsNotice: "",
   lastCommand: null,
   commandBusy: false,
+  commandAccessInfo: {},
+  commandAccessNotice: "",
   backupBusy: false,
   backupNotice: "",
   backupPreview: null,
@@ -367,6 +370,7 @@ function renderCommand() {
       </form>
       ${renderSpeechOutput()}
     </section>
+    ${renderCommandAccess()}
     <section class="band">
       <div class="section-head">
         <div>
@@ -415,6 +419,48 @@ function renderCommand() {
 
 function hasSpeechBridge() {
   return state.bridgeInfo.capabilities?.includes("offline_speech") && typeof window.ArgusAndroid?.getSpeechState === "function";
+}
+
+function refreshCommandAccessInfo() {
+  if (!commandAccessAvailable()) return;
+  try { state.commandAccessInfo = commandAccessBridge("getCommandAccessState"); }
+  catch (error) { state.commandAccessNotice = error.message; }
+}
+
+function renderCommandAccess() {
+  const native = commandAccessAvailable();
+  const info = state.commandAccessInfo;
+  const busy = state.commandBusy || state.routineBusy || isSpeechBusy(state.speechCapture) || isOutputBusy(state.speechOutput) || state.recording;
+  return `<section class="band">
+    <div class="section-head"><div><h2>Open Command faster</h2>
+      <p>Open this screen from your home screen or swipe-down panel, then tap Start listening.</p></div></div>
+    ${native ? `<div class="actions">
+      <button class="button secondary" type="button" data-action="pin-command" ${!info.pinSupported || busy ? "disabled" : ""}>Pin home-screen shortcut</button>
+      ${info.tilePromptSupported ? `<button class="button secondary" type="button" data-action="add-command-tile" ${info.tileRequestPending || busy ? "disabled" : ""}>${info.tileRequestPending ? "Waiting for Android…" : "Add Quick Settings tile"}</button>` : ""}
+      <button class="button quiet" type="button" data-action="refresh-command-access">Refresh access</button>
+    </div>
+    <p role="status">${escapeHtml(state.commandAccessNotice || info.message || "Checking shortcut support…")}</p>
+    ${info.shortcutPinned ? `<p>Android reports a pinned Command shortcut. Check your current home screen to find it.</p>` : ""}
+    ${info.shortcutPublished ? `<p>You can also long-press the Argus app icon and choose <strong>Command</strong> if your launcher supports app shortcuts.</p>` : ""}
+    ${!info.pinSupported ? `<p>This launcher does not offer a pin prompt. Try the app icon's long-press menu or the Argus tile.</p>` : ""}
+    <p role="status">${escapeHtml(info.tileMessage || "Swipe down twice, tap Edit and drag Argus into your active tiles.")}</p>
+    <p class="routine-help">The tile opens Command after you unlock the phone. Neither entry point starts recording or runs a command. Your typed draft stays in place while the app remains running.</p>` :
+    `<p>Install the Argus v0.12 Android app to add these shortcuts. You can keep typing commands here.</p>`}
+  </section>`;
+}
+
+function drainCommandLaunch() {
+  try {
+    if (!takeCommandLaunch({ ready: state.dbReady, busy: state.backupBusy || state.routineBusy || state.commandBusy, visible: !document.hidden })) return;
+    cancelSpeechCapture();
+    stopSpeechOutput();
+    state.activeView = "command";
+    refreshCommandAccessInfo();
+    refreshSpeechInfo();
+    refreshTtsInfo();
+    render();
+    window.scrollTo(0, 0);
+  } catch (error) { state.commandAccessNotice = error.message; }
 }
 
 function hasTtsBridge() {
@@ -680,7 +726,7 @@ async function changeReminder(action, id) {
 async function routineChange(callback) {
   if (state.routineBusy) return;
   state.routineBusy = true;
-  try { await callback(); } finally { state.routineBusy = false; }
+  try { await callback(); } finally { state.routineBusy = false; drainCommandLaunch(); }
 }
 
 function renderSearch() {
@@ -2296,6 +2342,10 @@ app.addEventListener("click", async (event) => {
   const { action, id } = actionButton.dataset;
   try {
   if (state.backupBusy) throw new Error("Finish the current backup operation first.");
+  if (["pin-command", "add-command-tile", "refresh-command-access"].includes(action)) {
+    state.commandAccessNotice = "";
+    commandAccessBridge({ "pin-command": "pinCommandShortcut", "add-command-tile": "addCommandTile", "refresh-command-access": "refreshCommandAccess" }[action]);
+  }
   if (action === "restore-backup") await routineChange(restoreBackup);
   if (action === "discard-backup") { state.backupPreview = null; render(); }
   if (action === "test-tts") playOfflineReply("Argus is ready. This is a test of the selected offline voice.");
@@ -2468,7 +2518,7 @@ app.addEventListener("submit", async (event) => {
     if (formType === "command") {
       if (state.commandBusy) return;
       state.commandBusy = true;
-      try { await handleCommand(form); } finally { state.commandBusy = false; }
+      try { await handleCommand(form); } finally { state.commandBusy = false; drainCommandLaunch(); }
     }
     if (formType === "global-search") {
       state.searchQuery = new FormData(form).get("query") || "";
@@ -2518,9 +2568,11 @@ async function init() {
     state.speechLanguage = getSettingValue("speech-language", "") || state.speechLanguage;
     refreshSpeechInfo();
     refreshTtsInfo();
+    refreshCommandAccessInfo();
     await handleSharedLaunch();
     state.dbReady = true;
     render();
+    drainCommandLaunch();
   } catch (error) {
     app.innerHTML = `
       <main class="boot-panel">
@@ -2543,6 +2595,8 @@ window.addEventListener("argus-native-resume", async () => {
   cancelSpeechCapture();
   refreshSpeechInfo();
   refreshTtsInfo();
+  refreshCommandAccessInfo();
+  drainCommandLaunch();
   if (state.speechModel?.state === "checking") state.speechModel = { state: "unknown", message: "The language check was interrupted. Tap Check language again." };
   if (!state.dbReady || state.routineBusy) return;
   await routineChange(refreshReminders);
@@ -2551,8 +2605,14 @@ window.addEventListener("argus-native-resume", async () => {
 
 window.ArgusSpeechInbox = { receive: receiveSpeechEvent };
 window.ArgusTtsInbox = { receive: receiveTtsEvent };
+window.ArgusCommandAccessInbox = { receive(info) {
+  if (!info || typeof info !== "object" || Array.isArray(info)) return;
+  state.commandAccessInfo = info;
+  if (state.dbReady && state.activeView === "command") render();
+} };
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { cancelSpeechCapture(); stopSpeechOutput(); }
+  else drainCommandLaunch();
 });
 
 init();

@@ -159,6 +159,16 @@ Argus v0.6 adds the first local command layer:
 - Ambiguous, invalid, past and nonexistent local times need correction.
 - “Hey Argus” can prefix text after tap-to-speak; background wake activation remains a separate future component.
 
+## v0.12 Scope
+
+- Dynamic Android Command shortcut with optional user-confirmed home-screen pinning.
+- Quick Settings tile with locked-device unlock and Android 13+ add-tile prompt support.
+- Navigation-only launch intents. No automatic speech capture, text execution or external action.
+- A once-only token handoff after database startup and active backup/command operations.
+- New intents supersede old pending requests; activity recreation preserves only unconsumed requests.
+- Warm launches reuse MainActivity and retain the in-memory command draft.
+- No new requested permissions, wake detector, foreground microphone service or database schema change.
+
 ## Current Boundaries
 
 - No cloud AI integration.
