@@ -794,3 +794,10 @@ audio {
 .speech-partial { color: var(--muted); }
 .speech-review { margin-top: 1rem; padding: 1rem; border-radius: 8px; background: white; }
 .speech-language-help summary { cursor: pointer; padding: .5rem 0; }
+.command-preview {
+  padding: 12px;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}

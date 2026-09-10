@@ -39,7 +39,15 @@ The first command layer is a deterministic local parser. It recognises simple co
 
 External actions such as opening URLs are converted into records in the `actions` store. The user must approve and dispatch them through the Android bridge flow.
 
-Reminder commands open the Routines form without choosing a time or enabling a schedule. Saved reminders start paused. The Enable button is the user's explicit scheduling action.
+Reminder commands can prefill Routines with a supported relative or calendar time using the phone's local time zone. The parsed time is a draft; saved reminders start paused. Enable remains the explicit scheduling action. Ambiguous, past or unsupported times leave the time field empty and retain the wording for correction. Nonexistent daylight-saving times are rejected instead of shifted silently.
+
+`command-language.js` handles polite/address prefixes, spoken numbers, bounded relative durations and explicit calendar patterns. The core parser handles aliases for capture, navigation, summaries and spoken-reply controls. Leading negations and conditions, and recognised chained actions, return no action. This is an English phrase parser. The Command preview explains the route before Run Command; speech callbacks still supply review text only. Explicit read-back commands can request offline playback of the previous reply.
+
+## Document Backup And Restore
+
+Export reads all IndexedDB stores in one readonly transaction before encoding attachments. Schema 4 backups include format/version metadata. Android receives ordered chunks of at most 48 KiB in a bounded private staging file, then launches `ACTION_CREATE_DOCUMENT`. The local-only picker grants access to the chosen document without broad storage permissions. A worker writes the file, reopens it and checks byte count and SHA-256 before reporting success. Cancellation, incomplete chunks, mismatched IDs and write/readback failures cannot become successful saves. Terminal operations and activity destruction remove staging files; initialization removes abandoned staging copies older than one day.
+
+The WebView uses `ACTION_OPEN_DOCUMENT` for restore and evidence intake. JavaScript validates schema, store lists, record IDs/types and duplicates, then decodes attachments before offering restore. The review shows counts and export date. Confirmed replacement cancels native reminders, then replaces all local stores in one IndexedDB transaction. An aborted replacement preserves records, but native reminders may already have been cancelled and need review. Restored reminders are paused without live tokens. Pending approvals are reset; completed action history is retained. Backups are unencrypted and capped at 64 MiB including encoded attachments.
 
 ## Local Reminder Scheduling
 
@@ -73,7 +81,7 @@ Each capture has a unique session ID. Both Kotlin and JavaScript reject stale an
 
 `OfflineTtsController` initializes the system text-to-speech engine, lists voices with `isNetworkConnectionRequired == false` and no `KEY_FEATURE_NOT_INSTALLED`, and stores the chosen voice per engine in native preferences. Automatic selection stays within the phone's language; a missing saved voice requires another explicit choice. Before each utterance, the controller rechecks the voice, calls `setVoice` and verifies the resulting voice. It does not call `setLanguage`, trigger downloads or fall back to browser synthesis.
 
-Engine callbacks are posted onto the main thread. Unique utterance IDs reject stale callbacks; audio focus, a two-minute playback limit, Stop, microphone capture, navigation and backgrounding end playback. Engine initialization has a ten-second timeout and generation checks; destruction releases the engine. Command responses are passed to speech only after the user taps Speak Reply; no text/audio is persisted by this adapter. Native voices are trusted according to Android engine metadata, so offline behaviour is part of phone validation. The browser retains text replies.
+Engine callbacks are posted onto the main thread. Unique utterance IDs reject stale callbacks; audio focus, a two-minute playback limit, Stop, microphone capture, navigation and backgrounding end playback. Engine initialization has a ten-second timeout and generation checks; destruction releases the engine. Command responses are passed to speech only after the user taps Speak Reply or explicitly runs a read-back command; no text/audio is persisted by this adapter. Native voices are trusted according to Android engine metadata, so offline behaviour is part of phone validation. The browser retains text replies.
 
 ## Module Boundary
 

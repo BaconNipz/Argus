@@ -22,6 +22,8 @@ class MainActivity : Activity() {
     private var pendingSharedText: String? = null
     private var pendingReminder: String? = null
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    lateinit var backupDocuments: BackupDocumentController
+        private set
     lateinit var offlineSpeech: OfflineSpeechController
         private set
     lateinit var offlineTts: OfflineTtsController
@@ -53,9 +55,13 @@ class MainActivity : Activity() {
                 this@MainActivity.filePathCallback?.onReceiveValue(null)
                 this@MainActivity.filePathCallback = filePathCallback
 
-                val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                val acceptedTypes = fileChooserParams?.acceptTypes?.filter { it.contains("/") }?.toTypedArray() ?: emptyArray()
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "*/*"
+                    type = acceptedTypes.singleOrNull() ?: "*/*"
+                    if (acceptedTypes.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, acceptedTypes)
+                    putExtra(Intent.EXTRA_LOCAL_ONLY, true)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
 
                 return try {
@@ -93,6 +99,7 @@ class MainActivity : Activity() {
                 refreshReminderUi()
             }
         }
+        backupDocuments = BackupDocumentController(this)
         offlineSpeech = OfflineSpeechController(this, ::emitSpeechEvent)
         offlineTts = OfflineTtsController(this, ::emitTtsEvent)
         webView.addJavascriptInterface(ArgusBridge(this), "ArgusAndroid")
@@ -126,6 +133,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (::backupDocuments.isInitialized) backupDocuments.destroy()
         if (::offlineSpeech.isInitialized) offlineSpeech.destroy()
         if (::offlineTts.isInitialized) offlineTts.destroy()
         filePathCallback?.onReceiveValue(null)
@@ -166,6 +174,10 @@ class MainActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == BackupDocumentController.REQUEST_CODE) {
+            backupDocuments.onResult(resultCode, data)
+            return
+        }
         if (requestCode != FILE_CHOOSER_REQUEST_CODE) return
 
         val callback = filePathCallback ?: return

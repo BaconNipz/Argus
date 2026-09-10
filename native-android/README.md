@@ -61,6 +61,10 @@ The scaffold now includes:
 
 Native tests: `gradle -p native-android testDebugUnitTest assembleDebug` from the repository root. See `docs/releases/v0.10.0.md` for behaviour and physical-device checks.
 
+## v0.11 Document Backups
+
+`BackupStaging` accepts bounded ordered chunks into private cache storage. `BackupDocumentController` opens `ACTION_CREATE_DOCUMENT`, writes on a worker thread, and reopens the result to verify byte count and SHA-256 before reporting success. The WebView opens restore/evidence files with `ACTION_OPEN_DOCUMENT`. Both pickers request local documents; no broad storage permission is added. Interrupted or failed saves must be repeated. Backups are unencrypted JSON up to 64 MiB. See `docs/releases/v0.11.0.md` for use, restore behavior and the wake-phrase decision.
+
 Before opening the native project, run:
 
 ```bash

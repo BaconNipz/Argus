@@ -96,6 +96,18 @@ This first release used typed commands and optional speech output. On-device spe
 - Restore remains paused and removes all active alert/snooze authority.
 - User reported v0.9 working on the phone; v0.10's new action behaviour still needs device validation.
 
+## v0.11 Phone Backups And Broader Commands
+
+- Save through Android's local document picker, with chunked transfer and readback verification.
+- Review backup counts and validate attachments before confirmed data replacement.
+- Restore reminders paused and reset pending action approvals.
+- Accept polite phrasing, optional “Hey Argus” prefixes and several aliases per command family.
+- Add app navigation, local summaries and read-back commands.
+- Interpret supported English reminder times as drafts for explicit review, save and enable.
+- Show command interpretation before running it. Ambiguous times remain unset.
+- Keep tap-to-speak; dedicated offline wake detection needs a separate device/battery prototype.
+- New file-picker and command behavior still needs phone validation.
+
 ## Following slices
 
 - Add Android intents for safe actions.
@@ -103,6 +115,7 @@ This first release used typed commands and optional speech output. On-device spe
 - Add clipboard/share workflows.
 - Add background checks with clear battery limits.
 - Use device feedback to choose whether an Argus-bundled offline speech engine is needed alongside the system adapter.
-- Improve Android backup/export through the system document picker and validate restoration across development builds.
+- Add a convenient shortcut to Command and evaluate a separately opt-in offline wake-detector prototype.
+- Validate backup restoration across development builds on the phone and refine format/error handling from feedback.
 
 Release signing still needs the four private GitHub Actions secrets. Debug builds remain a temporary testing path.

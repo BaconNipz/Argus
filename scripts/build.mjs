@@ -10,6 +10,8 @@ const files = [
   ["src/styles.css", "styles.css"],
   ["src/app.js", "app.js"],
   ["src/argus-core.js", "argus-core.js"],
+  ["src/command-language.js", "command-language.js"],
+  ["src/backup.js", "backup.js"],
   ["src/routines.js", "routines.js"],
   ["src/speech.js", "speech.js"],
   ["src/speech-output.js", "speech-output.js"],

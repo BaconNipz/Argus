@@ -1,8 +1,9 @@
-import { normalizeImportPayload } from "./argus-core.js";
+import { ARGUS_VERSION, normalizeImportPayload } from "./argus-core.js";
+import { BACKUP_STORES, decodeBackupAttachment, resetImportedAction, validateBackup } from "./backup.js";
 
 export const DB_NAME = "argus-local-core";
 export const DB_VERSION = 4;
-export const STORES = ["memory", "investigations", "tools", "voiceNotes", "actions", "reminders", "evidence", "settings", "events"];
+export const STORES = BACKUP_STORES;
 
 let dbPromise;
 
@@ -72,12 +73,26 @@ async function writeStore(storeName, operation) {
 
 export async function exportArgusData() {
   const data = {
+    format: "argus-backup",
+    appVersion: ARGUS_VERSION,
     schema: DB_VERSION,
     exportedAt: new Date().toISOString()
   };
 
+  const db = await openArgusDb();
+  const snapshot = await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES, "readonly");
+    const records = {};
+    for (const store of STORES) {
+      const request = tx.objectStore(store).getAll();
+      request.onsuccess = () => { records[store] = request.result; };
+    }
+    tx.oncomplete = () => resolve(records);
+    tx.onabort = () => reject(tx.error || new Error("Backup snapshot was interrupted."));
+    tx.onerror = () => reject(tx.error);
+  });
   for (const store of STORES) {
-    const records = await listRecords(store);
+    const records = snapshot[store];
     data[store] = [];
     for (const record of records) {
       data[store].push(await serializeRecordForExport(record));
@@ -87,7 +102,8 @@ export async function exportArgusData() {
   return data;
 }
 
-export async function importArgusData(payload) {
+export async function prepareArgusImport(payload) {
+  validateBackup(payload);
   const normalized = normalizeImportPayload(payload);
   // Decode files before starting a transaction, so a bad backup cannot clear stores halfway.
   const prepared = {};
@@ -95,10 +111,19 @@ export async function importArgusData(payload) {
     prepared[store] = [];
     for (const record of normalized[store]) {
       if (record && record.id) {
-        prepared[store].push(await deserializeRecordForImport(record));
+        const restored = await deserializeRecordForImport(record);
+        prepared[store].push(store === "actions" ? resetImportedAction(restored) : restored);
       }
     }
   }
+  return prepared;
+}
+
+export async function importArgusData(payload) {
+  return replaceArgusData(await prepareArgusImport(payload));
+}
+
+export async function replaceArgusData(prepared) {
   const db = await openArgusDb();
   await new Promise((resolve, reject) => {
     const tx = db.transaction(STORES, "readwrite");
@@ -128,12 +153,6 @@ async function blobToDataUrl(blob) {
   return `data:${blob.type || "application/octet-stream"};base64,${btoa(binary)}`;
 }
 
-async function dataUrlToBlob(dataUrl) {
-  const value = String(dataUrl || "");
-  if (!value.startsWith("data:")) return null;
-  return fetch(value).then((response) => response.blob());
-}
-
 async function serializeRecordForExport(record) {
   const copy = { ...record };
   if (copy.blob && typeof copy.blob.arrayBuffer === "function") {
@@ -145,8 +164,8 @@ async function serializeRecordForExport(record) {
 
 async function deserializeRecordForImport(record) {
   const copy = { ...record };
-  if (!copy.blob && copy.blobDataUrl) {
-    copy.blob = await dataUrlToBlob(copy.blobDataUrl);
+  if (copy.blobDataUrl !== undefined) {
+    copy.blob = decodeBackupAttachment(copy.blobDataUrl);
   }
   delete copy.blobDataUrl;
   return copy;

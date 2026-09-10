@@ -15,12 +15,23 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.10.0-native")
+            .put("version", "0.11.0-native")
             .put("host", "android")
-            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "local_reminder", "offline_speech", "offline_tts")))
+            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts")))
             .put("message", "Android shell attached. Reminder alerts and on-device speech input/output are available to check.")
             .toString()
     }
+
+    @JavascriptInterface
+    fun beginBackupExport(payload: String): String = guarded { activity.backupDocuments.begin(JSONObject(payload)).toString() }
+    @JavascriptInterface
+    fun appendBackupExport(payload: String): String = guarded { activity.backupDocuments.append(JSONObject(payload)).toString() }
+    @JavascriptInterface
+    fun finishBackupExport(payload: String): String = guarded { activity.backupDocuments.finish(JSONObject(payload)).toString() }
+    @JavascriptInterface
+    fun getBackupExportState(payload: String): String = guarded { activity.backupDocuments.state(JSONObject(payload)).toString() }
+    @JavascriptInterface
+    fun cancelBackupExport(payload: String): String = guarded { activity.backupDocuments.cancel(JSONObject(payload)).toString() }
 
     @JavascriptInterface
     fun dispatchAction(actionJson: String): String = guarded {
