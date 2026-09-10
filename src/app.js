@@ -36,12 +36,15 @@ import { canHandleReminderAlert, createReminder, mergeNativeReminders, toLocalDa
 import { beginSpeechCapture, emptySpeechCapture, isSpeechBusy, reduceSpeechCapture, speechBridge } from "./speech.js";
 import { beginSpeechOutput, emptySpeechOutput, isOutputBusy, reduceSpeechOutput, ttsBridge } from "./speech-output.js";
 import { notificationAdvice } from "./notification-status.js";
+import { localStatusReply } from "./command-language.js";
+import { MAX_BACKUP_BYTES, nativeBackupAvailable, readBackupFile, saveNativeBackup } from "./backup.js";
 import { CURRENT_ANDROID_BUILD, DEFAULT_UPDATE_MANIFEST_URL, checkForUpdate } from "./updater.js";
 import {
   clearStore,
   deleteRecord,
   exportArgusData,
-  importArgusData,
+  prepareArgusImport,
+  replaceArgusData,
   listRecords,
   putRecord,
   STORES
@@ -92,6 +95,10 @@ const state = {
   ttsInfo: { available: false, voices: [] },
   ttsNotice: "",
   lastCommand: null,
+  commandBusy: false,
+  backupBusy: false,
+  backupNotice: "",
+  backupPreview: null,
   toast: "",
   recording: null,
   sharedDraft: null,
@@ -316,6 +323,14 @@ function renderDashboard() {
   `;
 }
 
+function renderCommandPreview() {
+  if (!state.commandDraft.trim()) return "Say or type one instruction. Argus will show what it understands here.";
+  const parsed = parseArgusCommand(state.commandDraft);
+  if (parsed.intent === "unknown") return escapeHtml(parsed.response);
+  const time = parsed.payload.nextRunAt ? ` · ${formatDate(parsed.payload.nextRunAt)} · ${parsed.payload.repeat}` : "";
+  return `<strong>Understood: ${escapeHtml(parsed.title)}</strong>${escapeHtml(time)}<br>${escapeHtml(parsed.safety)}. Press Run Command when ready.`;
+}
+
 function renderCommand() {
   const canSpeak = hasTtsBridge() && state.ttsInfo.available && !isSpeechBusy(state.speechCapture) && !isOutputBusy(state.speechOutput);
   const last = state.lastCommand;
@@ -325,7 +340,7 @@ function renderCommand() {
         <div>
           <p class="eyebrow">Command Layer</p>
           <h1>Tell Argus what to do</h1>
-          <p>Simple commands are parsed on this device. Anything that opens Android or leaves Argus is queued for approval first.</p>
+          <p>Use everyday phrases to save notes, search, start cases or draft reminders. Check the interpretation below. External actions still need approval.</p>
         </div>
         <span class="status ready">local parser</span>
       </div>
@@ -333,10 +348,11 @@ function renderCommand() {
       <form class="quick-capture" data-form="command">
         <label class="field">
           <span>Command</span>
-          <textarea class="textarea" name="command" ${isSpeechBusy(state.speechCapture) ? "disabled" : ""} placeholder="Try: remember that Argus should stay local-first">${escapeHtml(
+          <textarea class="textarea" name="command" maxlength="4000" ${isSpeechBusy(state.speechCapture) ? "disabled" : ""} placeholder="Try: could you remind me in twenty minutes to take a break">${escapeHtml(
             state.commandDraft
           )}</textarea>
         </label>
+        <p class="command-preview" data-command-preview role="status">${renderCommandPreview()}</p>
         <div class="actions">
           <button class="button" type="submit" ${isSpeechBusy(state.speechCapture) ? "disabled" : ""}>Run Command</button>
           ${
@@ -355,7 +371,7 @@ function renderCommand() {
       <div class="section-head">
         <div>
           <h2>Examples</h2>
-          <p>These are deliberately plain command shapes so Argus stays predictable.</p>
+          <p>Commands currently use English phrases. You can say “please”, “could you” or “Hey Argus” first. Similar phrasings work; unfamiliar or ambiguous requests need editing. One instruction at a time.</p>
         </div>
       </div>
       <div class="command-examples">
@@ -502,7 +518,7 @@ function renderSpeechCapture() {
     ${capture.phase === "review" ? `<div class="speech-review"><strong>Recognised text</strong><p>${escapeHtml(capture.transcript)}</p>
       <button class="button secondary" type="button" data-action="use-speech-text">Use text in command box</button>
       <p>You can edit it below before tapping Run Command.</p></div>` : ""}
-    <p class="routine-help">Only records after you tap Start listening. Argus does not save command audio or run recognised text automatically.</p>` : ""}
+    <p class="routine-help">Tap Start listening first, then say your command, optionally beginning with “Hey Argus”. This is not a background wake phrase. Command audio is not saved and recognised text never runs automatically.</p>` : ""}
   </div>`;
 }
 
@@ -568,6 +584,7 @@ function renderRoutines() {
       </div>
       <form class="quick-capture" data-form="reminder">
         <h2>${draft.id ? "Edit reminder" : "New reminder"}</h2>
+        ${draft.notice ? `<p role="status">${escapeHtml(draft.notice)}</p>` : ""}
         <label class="field"><span>What should Argus remind you about?</span>
           <input class="input" name="title" required maxlength="120" placeholder="Review today's notes" value="${escapeHtml(draft.title || "")}"></label>
         <div class="field-grid">
@@ -1591,16 +1608,19 @@ function renderSettings() {
         </div>
       </div>
       <div class="actions">
-        <button class="button" type="button" data-action="export-data">Export JSON</button>
+        <button class="button" type="button" data-action="export-data" ${state.backupBusy ? "disabled" : ""}>Save backup${nativeBackupAvailable() ? " to phone" : ""}</button>
         <button class="button quiet" type="button" data-action="wipe-data">Wipe Local Data</button>
       </div>
+      <p>Backups include saved records, evidence files and voice-note audio. They are unencrypted JSON files, up to 64 MiB. Choose a private location such as a folder in Downloads.</p>
+      <p role="status">${escapeHtml(state.backupNotice || "Save a backup before changing installations. Android confirms success only after writing and checking the file.")}</p>
       <form class="quick-capture" data-form="import-data">
         <label class="field">
-          <span>Import backup</span>
-          <input class="input" type="file" name="backup" accept="application/json">
+          <span>Choose a backup to review</span>
+          <input class="input" type="file" name="backup" accept="application/json,.json" ${state.backupBusy ? "disabled" : ""}>
         </label>
-        <button class="button secondary" type="submit">Import JSON</button>
+        <button class="button secondary" type="submit" ${state.backupBusy ? "disabled" : ""}>Review backup</button>
       </form>
+      <div data-backup-preview>${renderBackupPreview()}</div>
     </section>
     <section class="band">
       <div class="section-head">
@@ -1693,7 +1713,27 @@ async function handleCommand(form) {
   const commandText = String(new FormData(form).get("command") || "").trim();
   state.commandDraft = commandText;
   const parsed = parseArgusCommand(commandText);
+  const previousReply = state.lastCommand?.response;
+  if (parsed.intent === "speak_reply") {
+    if (previousReply) playOfflineReply(previousReply);
+    else setToast("Run a command first so there is a reply to read.");
+    return;
+  }
   state.lastCommand = parsed;
+
+  if (["help", "stop_speaking"].includes(parsed.intent)) { setToast(parsed.response); return; }
+  if (parsed.intent === "navigate") {
+    if (parsed.targetView === "routines") await routineChange(refreshReminders);
+    state.activeView = parsed.targetView;
+    setToast(parsed.response);
+    return;
+  }
+  if (parsed.intent === "status") {
+    await routineChange(refreshReminders);
+    state.lastCommand = { ...parsed, response: localStatusReply(state, parsed.payload.kind) };
+    setToast("Local summary ready. Use Speak Reply to hear it.");
+    return;
+  }
 
   if (parsed.intent === "memory") {
     await putRecord(
@@ -1756,9 +1796,9 @@ async function handleCommand(form) {
   }
 
   if (parsed.intent === "local_reminder") {
-    state.reminderDraft = { title: parsed.payload.text };
+    state.reminderDraft = { title: parsed.payload.text, due: toLocalDateTime(parsed.payload.nextRunAt), repeat: parsed.payload.repeat, notice: parsed.payload.notice };
     state.activeView = "routines";
-    setToast("Choose a time, save, then enable your reminder.");
+    setToast(parsed.response);
     return;
   }
 
@@ -2015,19 +2055,63 @@ async function handleAction(form) {
   setToast("Action queued.");
 }
 
+function renderBackupPreview() {
+  const preview = state.backupPreview;
+  if (!preview) return "";
+  const labels = { memory: "Memories", investigations: "Cases", tools: "Tools", voiceNotes: "Voice notes", actions: "Actions", reminders: "Reminders", evidence: "Evidence items", settings: "Settings", events: "History entries" };
+  return `<article class="card"><h2>Review before restoring</h2>
+    <p>${escapeHtml(preview.name)} · exported ${escapeHtml(formatDate(preview.summary.exportedAt))}</p>
+    <p>${Object.entries(preview.summary.counts).map(([key, count]) => `${escapeHtml(labels[key] || key)}: ${count}`).join(" · ")}</p>
+    <p>${preview.summary.attachments} attachment(s) decoded successfully. Restoring replaces current records, pauses reminders and requires pending actions to be approved again.</p>
+    <div class="actions"><button class="button" data-action="restore-backup" ${state.backupBusy ? "disabled" : ""}>Replace data with this backup</button>
+    <button class="button quiet" data-action="discard-backup">Cancel restore</button></div></article>`;
+}
+
 async function handleImport(form) {
   const file = form.elements.backup.files?.[0];
   if (!file) return;
-  const payload = JSON.parse(await file.text());
-  if (!payload || typeof payload !== "object" || !Array.isArray(payload.memory)) throw new Error("Choose an Argus JSON backup.");
+  state.backupPreview = null;
+  state.backupBusy = true;
+  state.backupNotice = "Checking backup records and attachments…";
+  try {
+    const { payload, summary } = await readBackupFile(file);
+    const prepared = await prepareArgusImport(payload);
+    state.backupPreview = { prepared, summary, name: file.name };
+    state.backupNotice = "Backup checked. Review its contents below before replacing data.";
+  } catch (error) { state.backupNotice = error.message; throw error; }
+  finally { state.backupBusy = false; render(); }
+}
+
+async function restoreBackup() {
+  const preview = state.backupPreview;
+  if (!preview) throw new Error("Choose and review a backup first.");
   if (!window.confirm("Replace this device's Argus data with this backup? Existing reminders will be cancelled and restored reminders will be paused.")) return;
-  if (hasReminderBridge()) reminderBridge("clearReminders");
-  try { await importArgusData(payload); }
-  catch (error) { await refreshReminders(); await loadData(); throw error; }
-  await logEvent("import", `Imported ${file.name}.`);
-  await loadData();
-  state.reminderDraft = {};
-  setToast("Backup imported. Restored reminders are paused.");
+  state.backupBusy = true;
+  cancelSpeechCapture();
+  stopSpeechOutput();
+  try {
+    // All records and attachments have been prepared before cancelling any schedule.
+    if (hasReminderBridge()) {
+      try { reminderBridge("clearReminders"); }
+      catch (error) {
+        await refreshReminders(); await loadData();
+        throw new Error("Restore stopped because Android reminders could not be fully cancelled. Your local records were not replaced. Review Routines, then try again.");
+      }
+    }
+    try { await replaceArgusData(preview.prepared); }
+    catch (error) {
+      await refreshReminders(); await loadData();
+      throw new Error("Restore did not complete. Existing records were kept; Android reminders may now be paused. Review Routines before enabling them again.");
+    }
+    state.backupPreview = null;
+    state.reminderDraft = {};
+    state.lastCommand = null;
+    await logEvent("import", "Restored a reviewed Argus backup.");
+    await loadData();
+    state.backupNotice = "Backup restored. Reminders are paused; review their times before enabling them. Pending actions need fresh approval.";
+    setToast(state.backupNotice);
+  } catch (error) { state.backupNotice = error.message; throw error; }
+  finally { state.backupBusy = false; render(); }
 }
 
 async function handleUpdateSettings(form) {
@@ -2074,18 +2158,36 @@ async function checkUpdates() {
 }
 
 async function exportData() {
+  if (state.recording) throw new Error("Save your voice-note recording before backing up.");
+  state.backupBusy = true;
+  state.backupNotice = "Preparing a complete backup…";
+  render();
+  try {
   await refreshReminders();
   const data = await exportArgusData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  if (blob.size > MAX_BACKUP_BYTES) throw new Error("The backup exceeds 64 MiB. No file was saved.");
+  const filename = `argus-backup-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.json`;
+  if (nativeBackupAvailable()) {
+    const result = await saveNativeBackup(blob, filename, notice => { state.backupNotice = notice; render(); });
+    if (result.status === "cancelled") { state.backupNotice = "Backup cancelled. No backup was confirmed saved."; return; }
+    state.backupNotice = "Backup saved and checked. Use Review backup to inspect the saved file without replacing your data.";
+  } else {
+  if (state.bridgeInfo.host === "android") throw new Error("Install Argus v0.11 or later to save backups through Android's file picker.");
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `argus-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.download = filename;
+  document.body.append(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
-  await logEvent("export", "Exported Argus local data.");
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  state.backupNotice = "Download requested. Check your browser's Downloads, then use Review backup to check the saved file.";
+  }
+  await logEvent("export", nativeBackupAvailable() ? "Saved and verified a backup through Android." : "Requested a browser backup download.");
   await loadData();
-  setToast("Backup exported.");
+  } catch (error) { state.backupNotice = error.message; throw error; }
+  finally { state.backupBusy = false; render(); }
 }
 
 async function startRecording() {
@@ -2193,6 +2295,9 @@ app.addEventListener("click", async (event) => {
 
   const { action, id } = actionButton.dataset;
   try {
+  if (state.backupBusy) throw new Error("Finish the current backup operation first.");
+  if (action === "restore-backup") await routineChange(restoreBackup);
+  if (action === "discard-backup") { state.backupPreview = null; render(); }
   if (action === "test-tts") playOfflineReply("Argus is ready. This is a test of the selected offline voice.");
   if (action === "stop-tts") { stopSpeechOutput(); render(); }
   if (action === "tts-settings") { stopSpeechOutput(); ttsBridge("openTtsSettings"); }
@@ -2324,10 +2429,20 @@ app.addEventListener("click", async (event) => {
 app.addEventListener("input", (event) => {
   const form = event.target.closest('[data-form="reminder"]');
   if (form && event.target.name) state.reminderDraft[event.target.name] = event.target.value;
-  if (event.target.closest('[data-form="command"]') && event.target.name === "command") state.commandDraft = event.target.value;
+  if (event.target.closest('[data-form="command"]') && event.target.name === "command") {
+    state.commandDraft = event.target.value;
+    const preview = app.querySelector("[data-command-preview]");
+    if (preview) preview.innerHTML = renderCommandPreview();
+  }
 });
 
 app.addEventListener("change", async (event) => {
+  if (event.target.name === "backup") {
+    state.backupPreview = null;
+    const preview = app.querySelector("[data-backup-preview]");
+    if (preview) preview.innerHTML = "";
+    return;
+  }
   if (event.target.matches("[data-tts-voice]")) {
     try { state.ttsNotice = ""; ttsBridge("selectTtsVoice", { voiceId: event.target.value }); }
     catch (error) { state.ttsNotice = error.message; render(); }
@@ -2346,10 +2461,15 @@ app.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   try {
+    if (state.backupBusy) throw new Error("Finish the current backup operation first.");
     const formType = form.dataset.form;
     if (formType === "reminder") await routineChange(() => handleReminder(form));
     if (formType === "quick-capture") await handleQuickCapture(form);
-    if (formType === "command") await handleCommand(form);
+    if (formType === "command") {
+      if (state.commandBusy) return;
+      state.commandBusy = true;
+      try { await handleCommand(form); } finally { state.commandBusy = false; }
+    }
     if (formType === "global-search") {
       state.searchQuery = new FormData(form).get("query") || "";
       render();

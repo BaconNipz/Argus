@@ -1,7 +1,7 @@
 export const CURRENT_ANDROID_BUILD = {
   appId: "com.argus.localcore",
-  versionCode: 11,
-  versionName: "0.10.0"
+  versionCode: 12,
+  versionName: "0.11.0"
 };
 
 export const DEFAULT_UPDATE_MANIFEST_URL =

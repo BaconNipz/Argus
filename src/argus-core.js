@@ -1,6 +1,7 @@
 import { restoreReminders } from "./routines.js";
+import { normalizeCommandPhrase, reminderCommandDraft } from "./command-language.js";
 
-export const ARGUS_VERSION = "0.10.0";
+export const ARGUS_VERSION = "0.11.0";
 
 export const MEMORY_TYPES = ["note", "person", "project", "source", "place", "account", "task"];
 export const MEMORY_SENSITIVITY = ["normal", "sensitive", "private"];
@@ -23,15 +24,25 @@ export const COMMAND_INTENTS = [
   "search",
   "open_url",
   "local_reminder",
+  "navigate",
+  "status",
+  "help",
+  "speak_reply",
+  "stop_speaking",
   "unknown"
 ];
 export const COMMAND_EXAMPLES = [
   "remember that Argus should stay local-first",
-  "start case @example_user",
-  "save source https://example.com/profile",
-  "search example.com",
+  "Could you start an investigation into @example_user?",
+  "Please save this link https://example.com/profile",
+  "Find my notes about example.com",
   "open https://example.com after I approve it",
-  "remind me to export an Argus backup"
+  "Hey Argus, remind me in twenty minutes to take a break",
+  "Remind me to review my notes every day at nine am",
+  "Show me my reminders",
+  "What is due today?",
+  "Back up my data",
+  "What can you do?"
 ];
 
 export const INVESTIGATION_TEMPLATES = [
@@ -371,13 +382,6 @@ export function classifyCapture(text) {
   return { type: "memory" };
 }
 
-function stripCommandWakeWord(text) {
-  return String(text || "")
-    .trim()
-    .replace(/^argus[:,]?\s*/i, "")
-    .trim();
-}
-
 function commandResult({
   intent,
   title,
@@ -400,20 +404,46 @@ function commandResult({
   };
 }
 
-export function parseArgusCommand(input) {
+export function parseArgusCommand(input, now = new Date()) {
   const original = String(input || "").trim();
-  const text = stripCommandWakeWord(original);
-  if (!text) {
+  const text = normalizeCommandPhrase(original);
+  if (!text || original.length > 4000) {
     return commandResult({
       intent: "unknown",
       title: "Empty command",
-      response: "Type or dictate a short command for Argus to route.",
+      response: "Type or dictate one command of up to 4,000 characters.",
       confidence: "low",
       safety: "no action"
     });
   }
 
-  const rememberMatch = text.match(/^(?:remember|memorise|memorize|note)\s+(?:that\s+)?(.+)/i);
+  const phrase = text.replace(/[.!?]+$/, "").replace(/,?\s+please$/i, "");
+  if ((/^(?:don't|do not|never|if|unless|when)\b/i.test(phrase) && !/^(?:don't|do not) (?:let me )?forget\b/i.test(phrase)) || /\b(?:and then|then|also|and)\s+(?:please\s+)?(?:open|visit|delete|wipe|send|save|remember|remind|start|create|export|import)\b/i.test(phrase)) {
+    return commandResult({ intent: "unknown", title: "Please give one clear instruction", response: "I have not changed anything. Use one instruction at a time; conditional instructions and chained actions are not supported.", safety: "no action", confidence: "low" });
+  }
+  if (/^(?:help|show (?:me )?(?:the )?commands|what can you do|what commands (?:can i use|do you (?:know|understand)))$/i.test(phrase)) {
+    return commandResult({ intent: "help", title: "Command help", response: "I can save notes, start cases, save links, search your records, draft reminders and open app sections. You can say please or could you, and start with Hey Argus after tapping Start listening. Try the examples below.", confidence: "high" });
+  }
+  if (/^(?:read (?:that|it|the last reply) (?:back|out|aloud)|say that again|repeat (?:that|the last reply))$/i.test(phrase)) {
+    return commandResult({ intent: "speak_reply", title: "Read the last reply", response: "Reading the previous command reply.", confidence: "high" });
+  }
+  if (/^(?:stop (?:speaking|talking|reading)|be quiet|quiet)$/i.test(phrase)) {
+    return commandResult({ intent: "stop_speaking", title: "Stop spoken reply", response: "Spoken reply stopped.", confidence: "high" });
+  }
+  if (/^(?:what(?:'s| is) (?:due|on|scheduled) today|what (?:do i have|are my reminders) today|show (?:me )?today's reminders)$/i.test(phrase)) {
+    return commandResult({ intent: "status", title: "Today's reminders", response: "Checking your local reminders.", payload: { kind: "today" }, confidence: "high" });
+  }
+  if (/^(?:give (?:me )?(?:a |my )?(?:local )?summary|summarise (?:my )?(?:data|records)|summarize (?:my )?(?:data|records)|what (?:have i|do you have) saved)$/i.test(phrase)) {
+    return commandResult({ intent: "status", title: "Local summary", response: "Checking your saved records.", payload: { kind: "overview" }, confidence: "high" });
+  }
+  const sections = { reminders: "routines", routines: "routines", notes: "memory", memories: "memory", memory: "memory", cases: "investigations", investigations: "investigations", workbench: "workbench", tools: "tools", settings: "settings", dashboard: "dashboard", home: "dashboard", "voice notes": "voice", "action queue": "bridge", commands: "command" };
+  const section = phrase.match(/^(?:show|open|go to|take me to|bring up)\s+(?:me\s+)?(?:(?:my|the)\s+)?(.+)$/i)?.[1]?.toLowerCase();
+  if (sections[section] || /^(?:(?:back up|backup|export|restore|import)(?: (?:my |an? |the )?(?:data|backup|records|argus|argus backup))?)$/i.test(phrase)) {
+    const targetView = sections[section] || "settings";
+    return commandResult({ intent: "navigate", title: `Open ${targetView}`, response: targetView === "settings" ? "Opened Settings. Choose Save backup or Review backup to continue." : `Opened ${section}.`, targetView, confidence: "high" });
+  }
+
+  const rememberMatch = text.match(/^(?:remember|memorise|memorize|note(?: down)?|(?:make|take|write|save|add)\s+(?:me\s+)?(?:a\s+)?note(?:\s+(?:of|saying))?|keep (?:a )?note(?: of)?)\s+(?:that\s+)?(.+)/i);
   if (rememberMatch?.[1]) {
     const memoryText = rememberMatch[1].trim();
     return commandResult({
@@ -428,8 +458,8 @@ export function parseArgusCommand(input) {
   }
 
   const caseMatch =
-    text.match(/^(?:start|create|open)\s+(?:a\s+)?(?:case|investigation)\s*(?:for|about|on)?\s+(.+)/i) ||
-    text.match(/^(?:investigate|research)\s+(.+)/i);
+    phrase.match(/^(?:start|create|open|begin|make)\s+(?:an?\s+)?(?:case|investigation)\s+(?:(?:for|about|on|into)\s+)?(.+)/i) ||
+    phrase.match(/^(?:investigate|research)\s+(.+)/i);
   if (caseMatch?.[1]) {
     const target = caseMatch[1].trim();
     const targetType = detectOsintTargetType(target);
@@ -451,7 +481,7 @@ export function parseArgusCommand(input) {
   }
 
   const url = detectFirstUrl(text);
-  const sourceMatch = text.match(/^(?:save|capture|add)\s+(?:source|link)\b/i);
+  const sourceMatch = text.match(/^(?:(?:save|capture|add|keep)\s+(?:(?:this|that|a|the)\s+)?(?:source|link|url)|bookmark)\b/i);
   if (url && sourceMatch) {
     return commandResult({
       intent: "source",
@@ -464,7 +494,7 @@ export function parseArgusCommand(input) {
     });
   }
 
-  const openMatch = url && /^(?:open|visit|launch|go to|browse)\b/i.test(text);
+  const openMatch = url && /^(?:open|visit|launch|go to|take me to|browse)\b/i.test(text);
   if (openMatch) {
     return commandResult({
       intent: "open_url",
@@ -484,8 +514,8 @@ export function parseArgusCommand(input) {
   }
 
   const searchMatch =
-    text.match(/^(?:search|find)\s+(?:argus\s+)?(?:for\s+)?(.+)/i) ||
-    text.match(/^look\s+for\s+(.+)/i);
+    phrase.match(/^(?:find|search|look (?:for|up))\s+(?:(?:my |the )?(?:notes|memories|records|cases)\s+(?:about|for|on)\s+|(?:argus\s+)?(?:for\s+)?)(.+)/i) ||
+    phrase.match(/^(?:what (?:do you|does argus) (?:know|remember) about|show me (?:what you (?:know|remember)|my notes) (?:about|on))\s+(.+)/i);
   if (searchMatch?.[1]) {
     const query = searchMatch[1].trim();
     return commandResult({
@@ -499,14 +529,16 @@ export function parseArgusCommand(input) {
     });
   }
 
-  const taskMatch = text.match(/^(?:todo|task|remind|check|queue)\b\s*(.*)/i);
+  const taskMatch = phrase.match(/^(?:remind(?:\s+me)?|(?:set|create|add|make)\s+(?:me\s+)?(?:a\s+)?reminder|(?:don't|do not)\s+(?:let me )?forget|todo|task|check|queue)\b\s*(.*)/i);
   if (taskMatch) {
-    const taskText = ((taskMatch[1] || text).replace(/^(?:me\s+to|to)\s+/i, "").trim() || text);
+    const draft = reminderCommandDraft(taskMatch[1] || "", now);
+    const taskText = draft.text;
+    if (!taskText) return commandResult({ intent: "unknown", title: "What should I remind you about?", response: "Include a task, for example: remind me in twenty minutes to take a break.", safety: "no action", confidence: "low" });
     return commandResult({
       intent: "local_reminder",
       title: taskText.slice(0, 80),
-      response: "Choose a time in Routines, save the reminder, then enable it when ready.",
-      payload: { text: taskText, requestedBy: "command" },
+      response: draft.nextRunAt ? "I filled in a reminder draft. Review the time and repeat in Routines, then save and enable it." : draft.notice,
+      payload: { ...draft, requestedBy: "command" },
       targetView: "routines",
       confidence: "medium",
       safety: "choose a time before scheduling"

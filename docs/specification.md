@@ -149,6 +149,16 @@ Argus v0.6 adds the first local command layer:
 - Import, wipe, pause, edit and deletion cannot leave an old action capable of reactivating a reminder.
 - No new permissions, cloud service or database schema change.
 
+## v0.11 Scope
+
+- Native document backup export with ordered chunks, size limits, cancellation and written-file verification.
+- Validated backup review with attachment decoding before confirmed transactional restore.
+- Paused restored reminders and fresh approval for pending actions.
+- Broader English command phrases, app navigation, local summaries and explicit read-back controls.
+- Supported relative/calendar reminder times prefill the editor for review; they never enable scheduling automatically.
+- Ambiguous, invalid, past and nonexistent local times need correction.
+- “Hey Argus” can prefix text after tap-to-speak; background wake activation remains a separate future component.
+
 ## Current Boundaries
 
 - No cloud AI integration.

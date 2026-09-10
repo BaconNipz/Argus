@@ -1,8 +1,8 @@
-# Argus v0.10.0
+# Argus v0.11.0
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
-The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.10 adds Snooze and Done controls to reminder notifications, keeping the regular routine time intact. The v0.9 alert settings and offline spoken replies are included. The release workflow can publish signed APKs once private signing secrets are configured.
+The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.11 adds Android document backups with restore review, and broader English commands with reminder-time drafts. Snooze, Done and offline speech input/output remain available. The release workflow can publish signed APKs once private signing secrets are configured.
 
 ## What Argus Does Now
 
@@ -17,12 +17,12 @@ The current build has an offline web core and a native Android shell under `nati
 - Labels source relationships and optional observed timestamps.
 - Attaches local evidence files through the Android system file picker in the native APK.
 - Reviews cases through a local OSINT Workbench with timeline and link-analysis views.
-- Parses simple local commands without requiring cloud AI.
+- Understands several English phrasings for commands, including polite requests, app navigation and local summaries, without cloud AI.
 - Captures spoken commands using Android's dedicated on-device recognizer, with a typed fallback on unsupported devices.
 - Checks microphone permission and offline language availability, and can request language-pack downloads when supported.
 - Keeps recognised speech as review text until you choose to use and run it.
 - Queues URL-opening commands for confirmation before dispatch.
-- Sends reminder commands to Routines so you can choose a time.
+- Interprets supported spoken or typed reminder times, then opens Routines for review, saving and explicit enabling.
 - Saves one-off, daily and weekly reminders, with explicit enable, pause, edit and delete controls.
 - Uses Android notifications and background scheduling in the APK; browser reminders remain saved drafts.
 - Handles reminder occurrences from notifications or Routines with Snooze 10 min and Done, without disabling regular repeats.
@@ -30,7 +30,7 @@ The current build has an offline web core and a native Android shell under `nati
 - Restores reminders from backups in a paused state.
 - Speaks command replies using an installed voice Android marks as offline, with voice selection, test and stop controls.
 - Queues draft Android/automation actions for confirmation before dispatch.
-- Exports and imports the whole local Argus dataset as JSON.
+- Saves JSON backups through Android's system document picker and verifies the written bytes. Reviews records and attachments before a confirmed restore.
 - Includes a share-target route for later Android share-sheet intake.
 - Includes a Kotlin Android shell scaffold for Android Studio.
 - Includes a GitHub Actions workflow for building APK artifacts.
@@ -91,3 +91,5 @@ Argus v0.8 adds the first on-device speech input adapter. See [the v0.8 guide](d
 Argus v0.9 fixes reminder alert defaults and adds native offline spoken replies. See [the v0.9 guide](docs/releases/v0.9.0.md), including the settings step for existing notification categories.
 
 Argus v0.10 adds notification actions. See [the v0.10 guide](docs/releases/v0.10.0.md) for snooze timing, completion and repeat behaviour.
+
+Argus v0.11 adds phone backup and broader commands. See [the v0.11 guide](docs/releases/v0.11.0.md) for examples, restoring data and the current wake-phrase decision.
