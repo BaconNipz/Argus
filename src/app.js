@@ -34,6 +34,8 @@ import {
 import { dispatchNativeAction, readNativeBridgeInfo, registerNativeInbox, reminderBridge } from "./android-bridge.js";
 import { createReminder, mergeNativeReminders, toLocalDateTime } from "./routines.js";
 import { beginSpeechCapture, emptySpeechCapture, isSpeechBusy, reduceSpeechCapture, speechBridge } from "./speech.js";
+import { beginSpeechOutput, emptySpeechOutput, isOutputBusy, reduceSpeechOutput, ttsBridge } from "./speech-output.js";
+import { notificationAdvice } from "./notification-status.js";
 import { CURRENT_ANDROID_BUILD, DEFAULT_UPDATE_MANIFEST_URL, checkForUpdate } from "./updater.js";
 import {
   clearStore,
@@ -71,6 +73,7 @@ const state = {
   reminders: [],
   reminderDraft: {},
   reminderPermission: false,
+  notificationSettings: null,
   reminderError: "",
   routineBusy: false,
   evidence: [],
@@ -85,6 +88,9 @@ const state = {
   speechLanguage: "",
   speechModel: null,
   speechNotice: "",
+  speechOutput: emptySpeechOutput(),
+  ttsInfo: { available: false, voices: [] },
+  ttsNotice: "",
   lastCommand: null,
   toast: "",
   recording: null,
@@ -311,7 +317,7 @@ function renderDashboard() {
 }
 
 function renderCommand() {
-  const canSpeak = Boolean(window.speechSynthesis && window.SpeechSynthesisUtterance) && !isSpeechBusy(state.speechCapture);
+  const canSpeak = hasTtsBridge() && state.ttsInfo.available && !isSpeechBusy(state.speechCapture) && !isOutputBusy(state.speechOutput);
   const last = state.lastCommand;
   return `
     <section class="band">
@@ -337,12 +343,13 @@ function renderCommand() {
             last?.response
               ? `<button class="button secondary" type="button" data-action="speak-command" ${
                   canSpeak ? "" : "disabled"
-                }>Speak Reply</button>`
+                }>Speak Reply offline</button>`
               : ""
           }
           <button class="button quiet" type="button" data-action="clear-command">Clear</button>
         </div>
       </form>
+      ${renderSpeechOutput()}
     </section>
     <section class="band">
       <div class="section-head">
@@ -394,6 +401,67 @@ function hasSpeechBridge() {
   return state.bridgeInfo.capabilities?.includes("offline_speech") && typeof window.ArgusAndroid?.getSpeechState === "function";
 }
 
+function hasTtsBridge() {
+  return state.bridgeInfo.capabilities?.includes("offline_tts") && typeof window.ArgusAndroid?.getTtsState === "function";
+}
+
+function refreshTtsInfo() {
+  if (!hasTtsBridge()) return;
+  try { state.ttsInfo = ttsBridge("getTtsState"); }
+  catch (error) { state.ttsNotice = error.message; }
+}
+
+function renderSpeechOutput() {
+  const native = hasTtsBridge();
+  const info = state.ttsInfo;
+  const busy = isOutputBusy(state.speechOutput);
+  const recording = isSpeechBusy(state.speechCapture);
+  return `<div class="speech-panel">
+    <div class="section-head"><div><h2>Spoken replies</h2><p>${native ? escapeHtml(info.message || "Checking installed offline voices…") : "Offline spoken replies need the Argus v0.9 Android app. Replies remain readable on screen."}</p></div></div>
+    ${native ? `<label class="field"><span>Installed offline voice</span>
+      <select class="select" data-tts-voice ${!info.ready || busy || recording ? "disabled" : ""}>
+        <option value="" ${!info.selectedVoice ? "selected" : ""} disabled>Choose an offline voice</option>
+        ${(info.voices || []).map((voice) => `<option value="${escapeHtml(voice.id)}" ${voice.id === info.selectedVoice ? "selected" : ""}>${escapeHtml(voice.label)}</option>`).join("")}
+      </select></label>
+      <div class="actions">
+        <button class="button secondary" type="button" data-action="test-tts" ${info.available && !busy && !recording ? "" : "disabled"}>Test voice</button>
+        ${busy ? `<button class="button" type="button" data-action="stop-tts">Stop speaking</button>` : ""}
+        <button class="button quiet" type="button" data-action="tts-settings" ${recording ? "disabled" : ""}>Android text-to-speech settings</button>
+        <button class="button quiet" type="button" data-action="refresh-tts" ${busy || recording ? "disabled" : ""}>Refresh voices</button>
+      </div>
+      <p role="status">${escapeHtml(state.ttsNotice || state.speechOutput.message || "Speech plays only when you tap Test voice or Speak Reply. Use your phone's media volume to adjust it.")}</p>
+      ${info.mediaVolume === 0 ? `<p>Media volume was zero at the last check. Raise it if you cannot hear the voice.</p>` : ""}
+      <p class="routine-help">Only voices Android marks as installed and usable without network synthesis are listed. Voice downloads are managed in Android settings and can require internet access.</p>` : ""}
+  </div>`;
+}
+
+function playOfflineReply(text) {
+  if (isSpeechBusy(state.speechCapture) || state.recording) throw new Error("Finish recording before playing a spoken reply.");
+  if (!hasTtsBridge() || !state.ttsInfo.available) throw new Error("Choose an installed offline voice in Command before playing a reply.");
+  stopSpeechOutput();
+  state.ttsNotice = "";
+  state.speechOutput = beginSpeechOutput(`tts-${crypto.randomUUID()}`);
+  try { ttsBridge("speakOffline", { sessionId: state.speechOutput.sessionId, text }); }
+  catch (error) { state.speechOutput = reduceSpeechOutput(state.speechOutput, { type: "error", sessionId: state.speechOutput.sessionId, message: error.message }); }
+  render();
+}
+
+function stopSpeechOutput() {
+  if (!isOutputBusy(state.speechOutput)) return;
+  const sessionId = state.speechOutput.sessionId;
+  state.speechOutput = reduceSpeechOutput(state.speechOutput, { type: "stopped", sessionId, message: "Spoken reply stopped." });
+  try { ttsBridge("stopTts", { sessionId }); }
+  catch (error) { state.ttsNotice = error.message; }
+}
+
+function receiveTtsEvent(event) {
+  if (!event || typeof event !== "object") return;
+  if (event.type === "capabilities") state.ttsInfo = event;
+  else if (event.type === "notice") state.ttsNotice = event.message || "";
+  else state.speechOutput = reduceSpeechOutput(state.speechOutput, event);
+  if (state.dbReady && state.activeView === "command") render();
+}
+
 function refreshSpeechInfo() {
   if (!hasSpeechBridge()) return;
   try {
@@ -442,7 +510,7 @@ function startSpeechCapture() {
   if (isSpeechBusy(state.speechCapture)) return;
   if (state.recording) throw new Error("Stop the voice-note recording before starting a spoken command.");
   state.speechNotice = "";
-  window.speechSynthesis?.cancel();
+  stopSpeechOutput();
   state.speechCapture = beginSpeechCapture(`speech-${crypto.randomUUID()}`);
   try { speechBridge("startSpeech", { sessionId: state.speechCapture.sessionId, language: state.speechLanguage }); }
   catch (error) { state.speechCapture = reduceSpeechCapture(state.speechCapture, { type: "error", sessionId: state.speechCapture.sessionId, message: error.message }); }
@@ -487,8 +555,14 @@ function renderRoutines() {
         ${state.reminderError ? `<p>${escapeHtml(state.reminderError)}</p>` : ""}
         ${native ? `<div class="actions">
           ${!state.reminderPermission ? `<button class="button" data-action="reminder-permission">Enable notifications</button>` : ""}
-          <button class="button quiet" data-action="reminder-settings">Android notification settings</button>
+          <button class="button secondary" data-action="reminder-settings">Reminder sound and banner settings</button>
+          <button class="button quiet" data-action="test-reminder-alert" ${state.reminderPermission && !state.routineBusy ? "" : "disabled"}>Send test alert now</button>
           <button class="button quiet" data-action="refresh-reminders">Refresh status</button>
+        </div>
+        <div class="notification-help"><h3>Sound and banner status</h3>
+          ${notificationAdvice(state.notificationSettings, state.reminderPermission).map((note) => `<p>${escapeHtml(note)}</p>`).join("")}
+          <p>In Android settings, choose <strong>Alert</strong>, select a <strong>Sound</strong> and enable <strong>Show as pop-up</strong> if shown. Return here and send a test alert. Names vary with your Samsung software version.</p>
+          <p>Updates preserve your existing notification category settings. Argus cannot force a banner or sound over phone settings.</p>
         </div>` : ""}
       </div>
       <form class="quick-capture" data-form="reminder">
@@ -531,6 +605,7 @@ async function refreshReminders() {
   try {
     const result = reminderBridge("getReminderState");
     state.reminderPermission = result.notificationsEnabled === true;
+    state.notificationSettings = result.notificationSettings || null;
     const merged = mergeNativeReminders(await listRecords("reminders"), result.reminders || []);
     for (const item of merged) await putRecord("reminders", item);
     state.reminders = merged;
@@ -1609,6 +1684,7 @@ async function getOrCreateInboxInvestigation() {
 
 async function handleCommand(form) {
   if (isSpeechBusy(state.speechCapture)) throw new Error("Finish or cancel speech capture before running a command.");
+  stopSpeechOutput();
   const commandText = String(new FormData(form).get("command") || "").trim();
   state.commandDraft = commandText;
   const parsed = parseArgusCommand(commandText);
@@ -1696,12 +1772,7 @@ async function handleCommand(form) {
 
 function speakCommandResponse() {
   const response = state.lastCommand?.response;
-  if (!response || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-    setToast("Speech output is not available here.");
-    return;
-  }
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(new SpeechSynthesisUtterance(response));
+  if (response) playOfflineReply(response);
 }
 
 async function handleQuickCapture(form) {
@@ -2014,6 +2085,8 @@ async function exportData() {
 
 async function startRecording() {
   try {
+    stopSpeechOutput();
+    cancelSpeechCapture();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const recorder = new MediaRecorder(stream);
     const chunks = [];
@@ -2104,7 +2177,7 @@ async function dispatchAction(id) {
 app.addEventListener("click", async (event) => {
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) {
-    if (viewButton.dataset.view !== "command") cancelSpeechCapture();
+    if (viewButton.dataset.view !== "command") { cancelSpeechCapture(); stopSpeechOutput(); }
     state.activeView = viewButton.dataset.view;
     render();
     return;
@@ -2115,6 +2188,10 @@ app.addEventListener("click", async (event) => {
 
   const { action, id } = actionButton.dataset;
   try {
+  if (action === "test-tts") playOfflineReply("Argus is ready. This is a test of the selected offline voice.");
+  if (action === "stop-tts") { stopSpeechOutput(); render(); }
+  if (action === "tts-settings") { stopSpeechOutput(); ttsBridge("openTtsSettings"); }
+  if (action === "refresh-tts") { state.ttsNotice = ""; ttsBridge("refreshTtsVoices"); }
   if (action === "start-speech") startSpeechCapture();
   if (action === "stop-speech") {
     const sessionId = state.speechCapture.sessionId;
@@ -2140,6 +2217,13 @@ app.addEventListener("click", async (event) => {
   if (action === "clear-reminder-draft") { state.reminderDraft = {}; render(); }
   if (action === "reminder-permission") reminderBridge("requestReminderPermission");
   if (action === "reminder-settings") reminderBridge("openNotificationSettings");
+  if (action === "test-reminder-alert") {
+    await routineChange(async () => {
+      const result = reminderBridge("testReminderNotification");
+      await refreshReminders();
+      setToast(result.message);
+    });
+  }
   if (action === "refresh-reminders") { await routineChange(refreshReminders); render(); }
   if (action === "clear-shared-draft") {
     state.sharedDraft = null;
@@ -2147,6 +2231,7 @@ app.addEventListener("click", async (event) => {
   }
   if (action === "clear-command") {
     cancelSpeechCapture();
+    stopSpeechOutput();
     state.speechCapture = emptySpeechCapture();
     state.speechNotice = "";
     state.commandDraft = "";
@@ -2229,6 +2314,11 @@ app.addEventListener("input", (event) => {
 });
 
 app.addEventListener("change", async (event) => {
+  if (event.target.matches("[data-tts-voice]")) {
+    try { state.ttsNotice = ""; ttsBridge("selectTtsVoice", { voiceId: event.target.value }); }
+    catch (error) { state.ttsNotice = error.message; render(); }
+    return;
+  }
   if (!event.target.matches("[data-speech-language]")) return;
   state.speechLanguage = event.target.value;
   state.speechModel = null;
@@ -2279,6 +2369,7 @@ async function init() {
     }
     registerNativeInbox(async (text) => {
       cancelSpeechCapture();
+      stopSpeechOutput();
       state.sharedDraft = text;
       state.activeView = "dashboard";
       if (state.dbReady) {
@@ -2292,6 +2383,7 @@ async function init() {
     await refreshReminders();
     state.speechLanguage = getSettingValue("speech-language", "") || state.speechLanguage;
     refreshSpeechInfo();
+    refreshTtsInfo();
     await handleSharedLaunch();
     state.dbReady = true;
     render();
@@ -2308,6 +2400,7 @@ async function init() {
 
 window.ArgusOpenReminder = () => {
   cancelSpeechCapture();
+  stopSpeechOutput();
   state.activeView = "routines";
   if (state.dbReady) render();
   return true;
@@ -2315,15 +2408,17 @@ window.ArgusOpenReminder = () => {
 window.addEventListener("argus-native-resume", async () => {
   cancelSpeechCapture();
   refreshSpeechInfo();
+  refreshTtsInfo();
   if (state.speechModel?.state === "checking") state.speechModel = { state: "unknown", message: "The language check was interrupted. Tap Check language again." };
   if (!state.dbReady || state.routineBusy) return;
   await routineChange(refreshReminders);
-  if (state.activeView === "routines") render();
+  if (["routines", "command"].includes(state.activeView)) render();
 });
 
 window.ArgusSpeechInbox = { receive: receiveSpeechEvent };
+window.ArgusTtsInbox = { receive: receiveTtsEvent };
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) cancelSpeechCapture();
+  if (document.hidden) { cancelSpeechCapture(); stopSpeechOutput(); }
 });
 
 init();

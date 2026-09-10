@@ -31,6 +31,7 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
     init { refreshState() }
 
     fun snapshot(): String = cachedState
+    fun isCapturing(): Boolean = session.current() != null
 
     fun resume() { foreground = true; refreshState() }
 
@@ -74,6 +75,7 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
             return
         }
         if (Build.VERSION.SDK_INT < 31 || !session.begin(id)) return
+        activity.offlineTts.stop(message = "Spoken reply stopped for microphone capture.")
         releaseProbe()
         try {
             val engine = SpeechRecognizer.createOnDeviceSpeechRecognizer(activity)

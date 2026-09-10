@@ -1,6 +1,6 @@
 import { restoreReminders } from "./routines.js";
 
-export const ARGUS_VERSION = "0.8.0";
+export const ARGUS_VERSION = "0.9.0";
 
 export const MEMORY_TYPES = ["note", "person", "project", "source", "place", "account", "task"];
 export const MEMORY_SENSITIVITY = ["normal", "sensitive", "private"];
@@ -189,6 +189,15 @@ export const MODULES = [
     description: "Capture a spoken command with Android's on-device recognizer, where available, then review the text before running it."
   },
   {
+    id: "offline-speech-output",
+    name: "Offline Spoken Replies",
+    category: "voice",
+    status: "ready",
+    localFirst: true,
+    requiresAndroidBridge: true,
+    description: "Read command replies with an installed offline Android voice, with test and stop controls."
+  },
+  {
     id: "action-queue",
     name: "Action Queue",
     category: "automation",
@@ -290,7 +299,7 @@ export const ANDROID_BRIDGE_CAPABILITIES = [
     name: "Text To Speech",
     sensitivity: "low",
     status: "stub",
-    description: "Read Argus responses aloud through Android or browser speech output."
+    description: "Speak replies from Command. Queued text-to-speech actions are planned."
   }
 ];
 

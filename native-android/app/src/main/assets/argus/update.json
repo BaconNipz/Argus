@@ -1,15 +1,15 @@
 {
   "appId": "com.argus.localcore",
-  "versionCode": 9,
-  "versionName": "0.8.0",
-  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.8.0/Argus-v0.8.0-release.apk",
+  "versionCode": 10,
+  "versionName": "0.9.0",
+  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.9.0/Argus-v0.9.0-release.apk",
   "sha256": "",
   "releaseDate": "2026-09-09",
   "notes": [
-    "Adds push-to-talk command capture through Android on-device speech recognition.",
-    "Shows recognised text for review before using or running a command.",
-    "Adds microphone permission, language checking and requested language-pack downloads.",
-    "Cancels capture on backgrounding and ignores results from cancelled sessions.",
-    "Keeps typed commands available when the device or language is unsupported."
+    "Improves new reminder sound, vibration and banner defaults; repeat occurrences can alert again.",
+    "Adds direct reminder category settings, alert diagnostics and a test-alert button.",
+    "Adds installed offline voice selection, Test voice and Speak Reply controls.",
+    "Stops spoken output for microphone capture, backgrounding and audio focus loss.",
+    "Preserves existing Android notification preferences and includes the v0.8 speech-input review flow."
   ]
 }
