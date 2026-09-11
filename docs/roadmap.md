@@ -127,6 +127,17 @@ This first release used typed commands and optional speech output. On-device spe
 - Cancel on Stop, leaving Command, locking, backgrounding, timeout or activity destruction.
 - Measure real voice detection, accidental triggers, handoff and battery use on the phone before considering longer sessions.
 
+## v0.14 Background Voice And Assistant Setup
+
+- Remember an explicitly enabled microphone foreground service with an ongoing Pause notification.
+- Provide Android digital-assistant selection and a system voice session that opens Command after a wake detection.
+- Keep notification-tap fallback when Argus is not the selected assistant.
+- Use one-use expiring wake tickets, shared audio ownership and foreground/unlock checks for command capture.
+- Optionally execute supported local spoken commands; retain reviewed reminder and external-action drafts.
+- Show microphone-level diagnostics and default to the existing More sensitive setting in the new setup.
+- Pause while locked/screen-off and respect a persistent Pause choice; exclude enable settings from backups.
+- User confirmed v0.13 detects the phrase but misses their voice often. Accuracy and battery use remain device work.
+
 ## Following slices
 
 - Add Android intents for safe actions.
@@ -134,7 +145,7 @@ This first release used typed commands and optional speech output. On-device spe
 - Add clipboard/share workflows.
 - Add background checks with clear battery limits.
 - Use device feedback to choose whether an Argus-bundled offline speech engine is needed alongside the system adapter.
-- Use v0.13 device feedback to tune the wake phrase before considering any longer-running or background mode.
+- Use v0.14 phone feedback to tune wake recognition and validate default-assistant launch, microphone recovery and battery use before screen-off listening.
 - Validate backup restoration across development builds on the phone and refine format/error handling from feedback.
 
 Release signing still needs the four private GitHub Actions secrets. Debug builds remain a temporary testing path.

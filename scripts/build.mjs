@@ -13,6 +13,7 @@ const files = [
   ["src/command-language.js", "command-language.js"],
   ["src/command-access.js", "command-access.js"],
   ["src/wake-phrase.js", "wake-phrase.js"],
+  ["src/background-voice.js", "background-voice.js"],
   ["src/backup.js", "backup.js"],
   ["src/routines.js", "routines.js"],
   ["src/speech.js", "speech.js"],

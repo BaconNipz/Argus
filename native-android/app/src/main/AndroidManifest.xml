@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <queries>
         <intent>
@@ -22,6 +24,15 @@
         android:theme="@style/Theme.Argus"
         android:usesCleartextTraffic="false">
         <receiver android:name=".ReminderActionReceiver" android:exported="false" />
+        <service android:name=".BackgroundWakeService" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".ArgusVoiceInteractionService" android:exported="true" android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter><action android:name="android.service.voice.VoiceInteractionService" /></intent-filter>
+            <meta-data android:name="android.voice_interaction" android:resource="@xml/voice_interaction" />
+        </service>
+        <service android:name=".ArgusVoiceSessionService" android:exported="true" android:permission="android.permission.BIND_VOICE_INTERACTION" android:process=":voice_session" />
+        <service android:name=".ArgusRecognitionService" android:exported="true" android:permission="android.permission.BIND_SPEECH_RECOGNITION_SERVICE">
+            <intent-filter><action android:name="android.speech.RecognitionService" /></intent-filter>
+        </service>
         <service
             android:name=".CommandTileService"
             android:label="@string/command_tile_label"

@@ -117,6 +117,7 @@ class OfflineTtsController(private val activity: MainActivity, private val emit:
         val tts = engine
         val voice = if (ready) runCatching { tts?.voices?.firstOrNull { it.name == selected && OfflineVoicePolicy.eligible(candidate(it)) } }.getOrNull() else null
         if (tts == null || voice == null) { event("error", id, "Choose an installed offline voice and try again. Argus has not switched to online speech output."); return }
+        if (!VoiceAudioGate.acquire(id)) { event("error", id, "Pause Hey Argus before playing a spoken reply."); return }
         try {
             // Recheck on every utterance. Never call setLanguage(), which may select another voice/download data.
             check(tts.setVoice(voice) == TextToSpeech.SUCCESS)
@@ -128,7 +129,7 @@ class OfflineTtsController(private val activity: MainActivity, private val emit:
                 }, handler).build()
             focus = request
             if (audio.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-                releaseFocus(); event("error", id, "Audio is in use. Try the spoken reply again in a moment."); return
+                VoiceAudioGate.release(id); releaseFocus(); event("error", id, "Audio is in use. Try the spoken reply again in a moment."); return
             }
             session.begin(id)
             event("starting", id, "Preparing the spoken reply…")
@@ -139,7 +140,7 @@ class OfflineTtsController(private val activity: MainActivity, private val emit:
                 .also { handler.postDelayed(it, 120_000) }
         } catch (_: Exception) {
             if (session.accepts(id)) finish(id, "error", "The selected offline voice could not speak. Check voice settings and try again.")
-            else { releaseFocus(); event("error", id, "The selected offline voice is unavailable. Refresh voices and try again.") }
+            else { VoiceAudioGate.release(id); releaseFocus(); event("error", id, "The selected offline voice is unavailable. Refresh voices and try again.") }
         }
     }
 
@@ -151,6 +152,8 @@ class OfflineTtsController(private val activity: MainActivity, private val emit:
         clearTimeout()
         runCatching { engine?.stop() }
         releaseFocus()
+        VoiceAudioGate.release(active)
+        BackgroundWake.cooldownUntil = android.os.SystemClock.elapsedRealtime() + 2000L
         event("stopped", active, message)
     }
 
@@ -159,6 +162,8 @@ class OfflineTtsController(private val activity: MainActivity, private val emit:
         clearTimeout()
         if (type == "error") runCatching { engine?.stop() }
         releaseFocus()
+        VoiceAudioGate.release(id)
+        BackgroundWake.cooldownUntil = android.os.SystemClock.elapsedRealtime() + 2000L
         event(type, id, message)
     }
 

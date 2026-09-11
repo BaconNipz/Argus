@@ -114,6 +114,8 @@ class MainActivity : Activity() {
         offlineTts = OfflineTtsController(this, ::emitTtsEvent)
         commandAccess = CommandAccessController(this)
         wakePhrase = WakePhraseController(this, ::emitWakeEvent)
+        BackgroundWake.initialize(this)
+        BackgroundWake.attach(this) { emitBackgroundWakeEvent() }
         webView.addJavascriptInterface(ArgusBridge(this), "ArgusAndroid")
 
         setContentView(webView)
@@ -139,6 +141,8 @@ class MainActivity : Activity() {
         if (::offlineSpeech.isInitialized) offlineSpeech.resume()
         if (::offlineTts.isInitialized) offlineTts.resume()
         if (::wakePhrase.isInitialized) wakePhrase.resume()
+        BackgroundWake.ensureStarted(this)
+        emitBackgroundWakeEvent()
         refreshReminderUi()
     }
 
@@ -146,6 +150,7 @@ class MainActivity : Activity() {
         commandAccessForeground = false
         if (::wakePhrase.isInitialized) wakePhrase.pause()
         if (::offlineSpeech.isInitialized) offlineSpeech.pause()
+        BackgroundWake.cancelClaim(this)
         if (::offlineTts.isInitialized) offlineTts.pause()
         voiceScreenOwners.clear()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -155,6 +160,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         commandAccessForeground = false
         if (::wakePhrase.isInitialized) wakePhrase.destroy()
+        BackgroundWake.detach(this)
         if (::commandAccess.isInitialized) commandAccess.destroy()
         if (::backupDocuments.isInitialized) backupDocuments.destroy()
         if (::offlineSpeech.isInitialized) offlineSpeech.destroy()
@@ -198,6 +204,11 @@ class MainActivity : Activity() {
     fun emitWakeEvent(event: JSONObject) {
         if (!::webView.isInitialized || isDestroyed) return
         webView.evaluateJavascript("window.ArgusWakeInbox?.receive($event)", null)
+    }
+
+    fun emitBackgroundWakeEvent() {
+        if (!::webView.isInitialized || isDestroyed) return
+        webView.evaluateJavascript("window.ArgusBackgroundWakeInbox?.receive(${BackgroundWake.snapshot(this)})", null)
     }
 
     fun setVoiceScreenAwake(owner: String, keep: Boolean) {
