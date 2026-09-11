@@ -38,6 +38,7 @@ import { beginSpeechOutput, emptySpeechOutput, isOutputBusy, reduceSpeechOutput,
 import { notificationAdvice } from "./notification-status.js";
 import { localStatusReply } from "./command-language.js";
 import { commandAccessAvailable, commandAccessBridge, takeCommandLaunch } from "./command-access.js";
+import { beginWakeMode, canStartWakeCapture, emptyWakeMode, isWakeBusy, reduceWakeMode, wakeBridge, wakeBridgeAvailable } from "./wake-phrase.js";
 import { MAX_BACKUP_BYTES, nativeBackupAvailable, readBackupFile, saveNativeBackup } from "./backup.js";
 import { CURRENT_ANDROID_BUILD, DEFAULT_UPDATE_MANIFEST_URL, checkForUpdate } from "./updater.js";
 import {
@@ -99,6 +100,9 @@ const state = {
   commandBusy: false,
   commandAccessInfo: {},
   commandAccessNotice: "",
+  wakeMode: emptyWakeMode(),
+  wakeInfo: { available: false },
+  wakeSensitivity: "standard",
   backupBusy: false,
   backupNotice: "",
   backupPreview: null,
@@ -335,7 +339,7 @@ function renderCommandPreview() {
 }
 
 function renderCommand() {
-  const canSpeak = hasTtsBridge() && state.ttsInfo.available && !isSpeechBusy(state.speechCapture) && !isOutputBusy(state.speechOutput);
+  const canSpeak = hasTtsBridge() && state.ttsInfo.available && !isSpeechBusy(state.speechCapture) && !isOutputBusy(state.speechOutput) && !isWakeBusy(state.wakeMode);
   const last = state.lastCommand;
   return `
     <section class="band">
@@ -348,16 +352,17 @@ function renderCommand() {
         <span class="status ready">local parser</span>
       </div>
       ${renderSpeechCapture()}
+      ${renderWakePhrase()}
       <form class="quick-capture" data-form="command">
         <label class="field">
           <span>Command</span>
-          <textarea class="textarea" name="command" maxlength="4000" ${isSpeechBusy(state.speechCapture) ? "disabled" : ""} placeholder="Try: could you remind me in twenty minutes to take a break">${escapeHtml(
+          <textarea class="textarea" name="command" maxlength="4000" ${isSpeechBusy(state.speechCapture) || isWakeBusy(state.wakeMode) ? "disabled" : ""} placeholder="Try: could you remind me in twenty minutes to take a break">${escapeHtml(
             state.commandDraft
           )}</textarea>
         </label>
         <p class="command-preview" data-command-preview role="status">${renderCommandPreview()}</p>
         <div class="actions">
-          <button class="button" type="submit" ${isSpeechBusy(state.speechCapture) ? "disabled" : ""}>Run Command</button>
+          <button class="button" type="submit" ${isSpeechBusy(state.speechCapture) || isWakeBusy(state.wakeMode) ? "disabled" : ""}>Run Command</button>
           ${
             last?.response
               ? `<button class="button secondary" type="button" data-action="speak-command" ${
@@ -421,6 +426,77 @@ function hasSpeechBridge() {
   return state.bridgeInfo.capabilities?.includes("offline_speech") && typeof window.ArgusAndroid?.getSpeechState === "function";
 }
 
+function refreshWakeInfo() {
+  if (!wakeBridgeAvailable()) return;
+  try {
+    const info = wakeBridge("getWakeState");
+    state.wakeInfo = info;
+    state.wakeMode = reduceWakeMode(state.wakeMode, info);
+  } catch (error) { state.wakeInfo = { available: false, message: error.message }; }
+}
+
+function renderWakePhrase() {
+  const native = wakeBridgeAvailable();
+  const mode = state.wakeMode;
+  const busy = isWakeBusy(mode);
+  const blocked = !state.wakeInfo.available || !state.speechInfo.available || !state.speechInfo.microphoneGranted ||
+    isSpeechBusy(state.speechCapture) || state.speechCapture.phase === "review" || state.recording || state.commandBusy || state.routineBusy;
+  return `<div class="speech-panel">
+    <div class="section-head"><div><h2>Hey Argus</h2><p>Experimental wake listening while Command is open.</p></div>
+      <span class="status ${busy ? "ready" : "stub"}">${busy ? "microphone in use" : "off"}</span></div>
+    ${native ? `<p>Start a test, say <strong>Hey Argus</strong>, then pause. After the short vibration and the <strong>Listening</strong> message, say your command.</p>
+      <label class="field"><span>Wake sensitivity</span><select class="select" data-wake-sensitivity ${busy ? "disabled" : ""}>
+        <option value="standard" ${state.wakeSensitivity === "standard" ? "selected" : ""}>Standard</option>
+        <option value="sensitive" ${state.wakeSensitivity === "sensitive" ? "selected" : ""}>More sensitive — may trigger by mistake</option>
+      </select></label>
+      <div class="actions">${busy ? `<button class="button" type="button" data-action="stop-wake" ${mode.phase === "stopping" ? "disabled" : ""}>${mode.phase === "stopping" ? "Releasing microphone…" : "Stop wake listening"}</button>` :
+        `<button class="button secondary" type="button" data-action="start-wake" ${blocked ? "disabled" : ""}>Listen for Hey Argus · 5 min</button>`}</div>
+      <p role="status">${escapeHtml(mode.message || state.wakeInfo.message || "Wake mode is off.")}</p>
+      ${!state.speechInfo.microphoneGranted ? `<p>Allow the microphone in Speak a command first.</p>` : ""}
+      ${!state.speechInfo.available ? `<p>Starting a command after the wake phrase needs an available on-device speech service.</p>` : ""}
+      ${state.speechCapture.phase === "review" ? `<p>Use or clear the recognised text before starting another wake test.</p>` : ""}
+      ${mode.elapsedMs ? `<p>Last test: ${(mode.elapsedMs / 1000).toFixed(1)} seconds elapsed; ${(mode.audioMs / 1000).toFixed(1)} seconds of audio checked.</p>` : ""}
+      <p class="routine-help">This keeps the microphone and screen on for up to five minutes. It stops after one detection, when you tap Stop, leave Command, lock the phone or switch apps. Audio is processed on this phone and is not saved. Review the recognised words before running anything.</p>
+      <p class="routine-help">Voice and room noise affect detection. Try More sensitive if it misses you; it can also cause accidental captures. Wake listening must be started again for each test.</p>` :
+      `<p>Install the Argus v0.13 Android app to try offline wake listening. Tap-to-speak remains available in supported Android builds.</p>`}
+  </div>`;
+}
+
+function startWakeMode() {
+  if (isWakeBusy(state.wakeMode) || isSpeechBusy(state.speechCapture) || state.speechCapture.phase === "review" || state.recording) throw new Error("Finish or clear the current recording first.");
+  if (!state.speechInfo.available || !state.speechInfo.microphoneGranted) throw new Error("Set up on-device speech and microphone access first.");
+  stopSpeechOutput();
+  state.wakeMode = beginWakeMode(`wake-${crypto.randomUUID()}`);
+  try { wakeBridge("startWakeListening", { sessionId: state.wakeMode.sessionId, sensitivity: state.wakeSensitivity }); }
+  catch (error) { state.wakeMode = { ...state.wakeMode, phase: "error", message: error.message }; }
+  render();
+}
+
+function stopWakeMode() {
+  if (!isWakeBusy(state.wakeMode)) return;
+  state.wakeMode = { ...state.wakeMode, phase: "stopping", message: "Stopping wake listening and releasing the microphone…" };
+  try { wakeBridge("stopWakeListening", { sessionId: state.wakeMode.sessionId }); }
+  catch (error) { state.wakeMode = { ...state.wakeMode, phase: "error", message: error.message }; }
+}
+
+function receiveWakeEvent(event) {
+  if (!event || typeof event !== "object") return;
+  if (event.type === "wake_state") state.wakeInfo = event;
+  const previous = state.wakeMode;
+  state.wakeMode = reduceWakeMode(previous, event);
+  if (state.wakeMode !== previous && state.wakeMode.phase === "detected") {
+    if (canStartWakeCapture(state.wakeMode, { ready: state.dbReady, visible: !document.hidden, view: state.activeView,
+      busy: state.backupBusy || state.routineBusy || state.commandBusy || state.recording || isSpeechBusy(state.speechCapture) || state.speechCapture.phase === "review",
+      speechAvailable: state.speechInfo.available })) {
+      const wakeId = state.wakeMode.sessionId;
+      state.wakeMode = { ...state.wakeMode, phase: "handoff" };
+      try { startSpeechCapture(wakeId); }
+      catch (error) { stopWakeMode(); state.speechNotice = error.message; }
+    } else stopWakeMode();
+  }
+  if (state.dbReady && state.activeView === "command") render();
+}
+
 function refreshCommandAccessInfo() {
   if (!commandAccessAvailable()) return;
   try { state.commandAccessInfo = commandAccessBridge("getCommandAccessState"); }
@@ -430,7 +506,7 @@ function refreshCommandAccessInfo() {
 function renderCommandAccess() {
   const native = commandAccessAvailable();
   const info = state.commandAccessInfo;
-  const busy = state.commandBusy || state.routineBusy || isSpeechBusy(state.speechCapture) || isOutputBusy(state.speechOutput) || state.recording;
+  const busy = state.commandBusy || state.routineBusy || isSpeechBusy(state.speechCapture) || isOutputBusy(state.speechOutput) || isWakeBusy(state.wakeMode) || state.recording;
   return `<section class="band">
     <div class="section-head"><div><h2>Open Command faster</h2>
       <p>Open this screen from your home screen or swipe-down panel, then tap Start listening.</p></div></div>
@@ -452,6 +528,7 @@ function renderCommandAccess() {
 function drainCommandLaunch() {
   try {
     if (!takeCommandLaunch({ ready: state.dbReady, busy: state.backupBusy || state.routineBusy || state.commandBusy, visible: !document.hidden })) return;
+    stopWakeMode();
     cancelSpeechCapture();
     stopSpeechOutput();
     state.activeView = "command";
@@ -477,7 +554,7 @@ function renderSpeechOutput() {
   const native = hasTtsBridge();
   const info = state.ttsInfo;
   const busy = isOutputBusy(state.speechOutput);
-  const recording = isSpeechBusy(state.speechCapture);
+  const recording = isSpeechBusy(state.speechCapture) || isWakeBusy(state.wakeMode);
   return `<div class="speech-panel">
     <div class="section-head"><div><h2>Spoken replies</h2><p>${native ? escapeHtml(info.message || "Checking installed offline voices…") : "Offline spoken replies need the Argus v0.9 Android app. Replies remain readable on screen."}</p></div></div>
     ${native ? `<label class="field"><span>Installed offline voice</span>
@@ -498,6 +575,7 @@ function renderSpeechOutput() {
 }
 
 function playOfflineReply(text) {
+  if (isWakeBusy(state.wakeMode)) throw new Error("Stop wake listening before playing a reply.");
   if (isSpeechBusy(state.speechCapture) || state.recording) throw new Error("Finish recording before playing a spoken reply.");
   if (!hasTtsBridge() || !state.ttsInfo.available) throw new Error("Choose an installed offline voice in Command before playing a reply.");
   stopSpeechOutput();
@@ -549,7 +627,7 @@ function renderSpeechCapture() {
     <div class="actions">
       ${busy ? `<button class="button" type="button" data-action="stop-speech" ${capture.phase === "processing" ? "disabled" : ""}>Finish speaking</button>
         <button class="button quiet" type="button" data-action="cancel-speech">Cancel recording</button>` :
-        `<button class="button" type="button" data-action="${info.microphoneGranted ? "start-speech" : "speech-permission"}" ${info.available ? "" : "disabled"}>${info.microphoneGranted ? "Start listening" : "Allow microphone"}</button>`}
+        `<button class="button" type="button" data-action="${info.microphoneGranted ? "start-speech" : "speech-permission"}" ${info.available && !isWakeBusy(state.wakeMode) ? "" : "disabled"}>${info.microphoneGranted ? "Start listening" : "Allow microphone"}</button>`}
       <button class="button quiet" type="button" data-action="speech-settings" ${busy ? "disabled" : ""}>Android voice settings</button>
       ${!info.microphoneGranted ? `<button class="button quiet" type="button" data-action="speech-app-settings">Argus app permissions</button>` : ""}
     </div>
@@ -564,17 +642,22 @@ function renderSpeechCapture() {
     ${capture.phase === "review" ? `<div class="speech-review"><strong>Recognised text</strong><p>${escapeHtml(capture.transcript)}</p>
       <button class="button secondary" type="button" data-action="use-speech-text">Use text in command box</button>
       <p>You can edit it below before tapping Run Command.</p></div>` : ""}
-    <p class="routine-help">Tap Start listening first, then say your command, optionally beginning with “Hey Argus”. This is not a background wake phrase. Command audio is not saved and recognised text never runs automatically.</p>` : ""}
+    <p class="routine-help">Tap Start listening, or use the optional Hey Argus test below. Command audio is not saved and recognised text never runs automatically.</p>` : ""}
   </div>`;
 }
 
-function startSpeechCapture() {
+function startSpeechCapture(wakeId = null) {
+  if (!wakeId && isWakeBusy(state.wakeMode)) throw new Error("Stop wake listening and wait for the microphone to be released first.");
   if (isSpeechBusy(state.speechCapture)) return;
   if (state.recording) throw new Error("Stop the voice-note recording before starting a spoken command.");
   state.speechNotice = "";
   stopSpeechOutput();
   state.speechCapture = beginSpeechCapture(`speech-${crypto.randomUUID()}`);
-  try { speechBridge("startSpeech", { sessionId: state.speechCapture.sessionId, language: state.speechLanguage }); }
+  try {
+    const payload = { sessionId: state.speechCapture.sessionId, language: state.speechLanguage };
+    if (wakeId) wakeBridge("startSpeechFromWake", { ...payload, wakeId });
+    else speechBridge("startSpeech", payload);
+  }
   catch (error) { state.speechCapture = reduceSpeechCapture(state.speechCapture, { type: "error", sessionId: state.speechCapture.sessionId, message: error.message }); }
   render();
 }
@@ -2238,6 +2321,7 @@ async function exportData() {
 
 async function startRecording() {
   try {
+    if (isWakeBusy(state.wakeMode)) throw new Error("Wait for wake listening to release the microphone first.");
     stopSpeechOutput();
     cancelSpeechCapture();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -2330,7 +2414,7 @@ async function dispatchAction(id) {
 app.addEventListener("click", async (event) => {
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) {
-    if (viewButton.dataset.view !== "command") { cancelSpeechCapture(); stopSpeechOutput(); }
+    if (viewButton.dataset.view !== "command") { stopWakeMode(); cancelSpeechCapture(); stopSpeechOutput(); }
     state.activeView = viewButton.dataset.view;
     render();
     return;
@@ -2342,6 +2426,9 @@ app.addEventListener("click", async (event) => {
   const { action, id } = actionButton.dataset;
   try {
   if (state.backupBusy) throw new Error("Finish the current backup operation first.");
+  if (isWakeBusy(state.wakeMode) && !["stop-wake", "clear-command", "cancel-speech", "stop-tts"].includes(action)) throw new Error("Stop wake listening before using another command control.");
+  if (action === "start-wake") startWakeMode();
+  if (action === "stop-wake") { stopWakeMode(); render(); }
   if (["pin-command", "add-command-tile", "refresh-command-access"].includes(action)) {
     state.commandAccessNotice = "";
     commandAccessBridge({ "pin-command": "pinCommandShortcut", "add-command-tile": "addCommandTile", "refresh-command-access": "refreshCommandAccess" }[action]);
@@ -2399,6 +2486,7 @@ app.addEventListener("click", async (event) => {
     render();
   }
   if (action === "clear-command") {
+    stopWakeMode();
     cancelSpeechCapture();
     stopSpeechOutput();
     state.speechCapture = emptySpeechCapture();
@@ -2487,6 +2575,10 @@ app.addEventListener("input", (event) => {
 });
 
 app.addEventListener("change", async (event) => {
+  if (event.target.matches("[data-wake-sensitivity]")) {
+    if (["standard", "sensitive"].includes(event.target.value)) state.wakeSensitivity = event.target.value;
+    return;
+  }
   if (event.target.name === "backup") {
     state.backupPreview = null;
     const preview = app.querySelector("[data-backup-preview]");
@@ -2512,6 +2604,7 @@ app.addEventListener("submit", async (event) => {
 
   try {
     if (state.backupBusy) throw new Error("Finish the current backup operation first.");
+    if (isWakeBusy(state.wakeMode)) throw new Error("Stop wake listening before saving or running a command.");
     const formType = form.dataset.form;
     if (formType === "reminder") await routineChange(() => handleReminder(form));
     if (formType === "quick-capture") await handleQuickCapture(form);
@@ -2552,6 +2645,7 @@ async function init() {
       navigator.serviceWorker.register("./service-worker.js").catch(() => {});
     }
     registerNativeInbox(async (text) => {
+      stopWakeMode();
       cancelSpeechCapture();
       stopSpeechOutput();
       state.sharedDraft = text;
@@ -2569,6 +2663,7 @@ async function init() {
     refreshSpeechInfo();
     refreshTtsInfo();
     refreshCommandAccessInfo();
+    refreshWakeInfo();
     await handleSharedLaunch();
     state.dbReady = true;
     render();
@@ -2585,6 +2680,7 @@ async function init() {
 }
 
 window.ArgusOpenReminder = () => {
+  stopWakeMode();
   cancelSpeechCapture();
   stopSpeechOutput();
   state.activeView = "routines";
@@ -2596,6 +2692,7 @@ window.addEventListener("argus-native-resume", async () => {
   refreshSpeechInfo();
   refreshTtsInfo();
   refreshCommandAccessInfo();
+  refreshWakeInfo();
   drainCommandLaunch();
   if (state.speechModel?.state === "checking") state.speechModel = { state: "unknown", message: "The language check was interrupted. Tap Check language again." };
   if (!state.dbReady || state.routineBusy) return;
@@ -2605,13 +2702,14 @@ window.addEventListener("argus-native-resume", async () => {
 
 window.ArgusSpeechInbox = { receive: receiveSpeechEvent };
 window.ArgusTtsInbox = { receive: receiveTtsEvent };
+window.ArgusWakeInbox = { receive: receiveWakeEvent };
 window.ArgusCommandAccessInbox = { receive(info) {
   if (!info || typeof info !== "object" || Array.isArray(info)) return;
   state.commandAccessInfo = info;
   if (state.dbReady && state.activeView === "command") render();
 } };
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { cancelSpeechCapture(); stopSpeechOutput(); }
+  if (document.hidden) { stopWakeMode(); cancelSpeechCapture(); stopSpeechOutput(); }
   else drainCommandLaunch();
 });
 

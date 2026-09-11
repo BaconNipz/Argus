@@ -1,15 +1,15 @@
 {
   "appId": "com.argus.localcore",
-  "versionCode": 13,
-  "versionName": "0.12.0",
-  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.12.0/Argus-v0.12.0-release.apk",
+  "versionCode": 14,
+  "versionName": "0.13.0",
+  "apkUrl": "https://github.com/BaconNipz/Argus/releases/download/argus-v0.13.0/Argus-v0.13.0-release.apk",
   "sha256": "",
-  "releaseDate": "2026-09-10",
+  "releaseDate": "2026-09-11",
   "notes": [
-    "Open Command from an Android home-screen shortcut or Quick Settings tile.",
-    "Add access points from Command, with launcher support and tile request feedback.",
-    "Keep typed commands during a warm launch; wait for startup and active backup operations.",
-    "Tap Start listening after opening Command. Shortcuts never start recording or run text.",
-    "Includes phone backup review, broader English commands and reminder-time drafts from v0.11."
+    "Experimental offline Hey Argus while Command is open, with explicit five-minute arming.",
+    "One detection hands over to on-device speech capture; recognised commands still wait for review.",
+    "Wake mode stops on Stop, navigation, backgrounding, locking, timeout or one detection.",
+    "Standard and More sensitive options; runtime and English wake model bundled for ARM64 phones.",
+    "Includes Command shortcuts, phone backups, broader commands and reminder controls from prior builds."
   ]
 }

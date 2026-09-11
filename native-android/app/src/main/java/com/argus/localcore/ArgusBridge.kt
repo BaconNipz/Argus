@@ -15,15 +15,45 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.12.0-native")
+            .put("version", "0.13.0-native")
             .put("host", "android")
-            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts", "command_access")))
+            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts", "command_access", "wake_phrase")))
             .put("message", "Android shell attached. Reminder alerts and on-device speech input/output are available to check.")
             .toString()
     }
 
     @JavascriptInterface
     fun getCommandAccessState(ignored: String): String = activity.commandAccess.snapshot()
+
+    @JavascriptInterface
+    fun getWakeState(ignored: String): String = activity.wakePhrase.snapshot()
+
+    @JavascriptInterface
+    fun startWakeListening(payload: String): String = guarded {
+        val input = JSONObject(payload)
+        val id = checkedWakeId(input, "sessionId")
+        val sensitivity = input.getString("sensitivity")
+        WakePolicy.sensitivity(sensitivity)
+        activity.runOnUiThread { activity.wakePhrase.start(id, sensitivity) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun stopWakeListening(payload: String): String = guarded {
+        val id = checkedWakeId(JSONObject(payload), "sessionId")
+        activity.runOnUiThread { activity.wakePhrase.cancel(id) }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun startSpeechFromWake(payload: String): String = guarded {
+        val input = JSONObject(payload)
+        val wakeId = checkedWakeId(input, "wakeId")
+        val speechId = checkedSpeechId(input)
+        val language = checkedSpeechLanguage(input)
+        activity.runOnUiThread { activity.wakePhrase.startCommand(wakeId, speechId, language) }
+        JSONObject().put("status", "requested").toString()
+    }
 
     @JavascriptInterface
     fun refreshCommandAccess(ignored: String): String = guarded {
@@ -234,6 +264,10 @@ class ArgusBridge(private val activity: MainActivity) {
 
     private fun checkedTtsId(input: JSONObject): String = input.getString("sessionId").also {
         require(it.matches(Regex("tts-[a-zA-Z0-9-]{1,80}"))) { "Invalid speech-output session." }
+    }
+
+    private fun checkedWakeId(input: JSONObject, key: String): String = input.getString(key).also {
+        require(it.matches(Regex("wake-[a-zA-Z0-9-]{1,80}"))) { "Invalid wake session." }
     }
 
     private fun checkedSpeechId(input: JSONObject): String = input.getString("sessionId").also {

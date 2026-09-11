@@ -118,6 +118,15 @@ This first release used typed commands and optional speech output. On-device spe
 - Preserve a typed draft during a warm launch; never start the microphone or execute intent text.
 - Launcher, tile, lock-screen and interrupted-picker behavior still needs phone validation.
 
+## v0.13 Foreground Hey Argus Prototype
+
+- Explicitly arm one offline wake test for up to five minutes while Command stays open.
+- Bundle the pinned runtime/model in an ARM64 APK, with checksums and licence notices.
+- Offer Standard / More sensitive settings; keep the screen awake during listening.
+- Release wake audio before one-use on-device command capture, with recognised-text review unchanged.
+- Cancel on Stop, leaving Command, locking, backgrounding, timeout or activity destruction.
+- Measure real voice detection, accidental triggers, handoff and battery use on the phone before considering longer sessions.
+
 ## Following slices
 
 - Add Android intents for safe actions.
@@ -125,7 +134,7 @@ This first release used typed commands and optional speech output. On-device spe
 - Add clipboard/share workflows.
 - Add background checks with clear battery limits.
 - Use device feedback to choose whether an Argus-bundled offline speech engine is needed alongside the system adapter.
-- Evaluate a separately opt-in offline wake-detector prototype, including microphone lifecycle, accidental triggers and phone battery use.
+- Use v0.13 device feedback to tune the wake phrase before considering any longer-running or background mode.
 - Validate backup restoration across development builds on the phone and refine format/error handling from feedback.
 
 Release signing still needs the four private GitHub Actions secrets. Debug builds remain a temporary testing path.

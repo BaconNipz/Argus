@@ -108,6 +108,7 @@ class OfflineTtsController(private val activity: MainActivity, private val emit:
     fun speak(id: String, text: String) {
         if (destroyed) return
         if (!foreground) { event("error", id, "Open Command before starting a spoken reply."); return }
+        if (activity.wakePhrase.isBusy()) { event("error", id, "Stop wake listening before playing a spoken reply."); return }
         if (activity.offlineSpeech.isCapturing()) { event("error", id, "Finish or cancel speech input before playing a reply."); return }
         if (text.isBlank() || text.length > TextToSpeech.getMaxSpeechInputLength()) {
             event("error", id, "This reply is empty or too long to speak. Read it on screen."); return

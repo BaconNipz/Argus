@@ -1,6 +1,6 @@
 # Argus Native Android Shell
 
-Argus v0.10 uses a native Kotlin WebView shell, WorkManager reminders with notification actions, on-device speech input and offline voice output. APKs and native unit tests build through GitHub Actions or Android Studio; the development workspace does not contain the Android SDK.
+Argus v0.13 uses a native Kotlin WebView shell, WorkManager reminders with notification actions, on-device speech input and offline voice output. APKs and native unit tests build through GitHub Actions or Android Studio; the development workspace does not contain the Android SDK.
 
 ## Target Stack
 
@@ -59,7 +59,7 @@ The scaffold now includes:
 - `ReminderActionReceiver` and `ReminderActionWorker` for immutable Snooze/Done actions, validated against current native records.
 - Separate snooze work with regular-occurrence precedence, cancellation and duplicate-action protection.
 
-Native tests: `gradle -p native-android testDebugUnitTest assembleDebug` from the repository root. See `docs/releases/v0.10.0.md` for behaviour and physical-device checks.
+Prepare the wake dependency first (see below). Native tests: `gradle -p native-android testDebugUnitTest assembleDebug` from the repository root. See `docs/releases/v0.10.0.md` for behaviour and physical-device checks.
 
 ## v0.11 Document Backups
 
@@ -78,8 +78,19 @@ Before opening the native project, run:
 ```bash
 node scripts/build.mjs
 node scripts/sync-native-assets.mjs
+python3 scripts/prepare-wake-runtime.py
 ```
 
 Then open `native-android/` in Android Studio.
 
 For repeat install-over-install updates, configure a private release keystore through GitHub Actions secrets or Android Studio signing settings. Debug APKs are useful for quick testing, but Android treats each different signing key as a different update chain.
+
+## v0.13 Foreground Wake Phrase
+
+`WakePhraseController` owns one explicitly armed 5-minute AudioRecord session on a worker thread, using sherpa-onnx 1.13.8 and the English GigaSpeech 3.3M KWS model. It processes 16 kHz mono samples in memory. Its worker releases AudioRecord, the model stream and the engine before publishing detection. `WakeSession` grants a matching one-use handoff for five seconds only while the activity is resumed. Stop/pause/destroy revoke that authority. Web navigation and visibility changes also cancel; no wake state is persisted or automatically rearmed.
+
+After a hit, the existing dedicated Android on-device recognizer captures a command for review. Both engines stop spoken replies before microphone use; native guards prevent overlap. The window stays awake during active wake/capture and clears that flag on cancellation, completion or pause. There is no wake service, boot receiver or additional permission.
+
+The preparation script requires Python 3.11+ and curl. It downloads fixed public release artifacts, verifies byte length and SHA-256, and extracts only named regular-file model members. Downloads are needed on the build machine, not the user's phone. AAR/cache/model binaries are ignored by Git. Use `--cache-dir PATH` to reuse already verified artifacts. Model provenance and licence notices ship inside the APK. CI runs preparation before native unit tests and assembly. This build packages only `arm64-v8a`, matching the S23 Ultra; it is not an x86 emulator build.
+
+See `docs/releases/v0.13.0.md` for limits and physical-device validation. The small synthetic check is evidence that the model loads and can detect the phrase, not a real-world accuracy or battery measurement.

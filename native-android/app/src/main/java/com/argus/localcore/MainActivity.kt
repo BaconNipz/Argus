@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.WindowManager
 import android.webkit.ValueCallback
 import android.webkit.JsResult
 import android.webkit.WebResourceRequest
@@ -22,6 +23,7 @@ class MainActivity : Activity() {
     private var pendingSharedText: String? = null
     private var pendingReminder: String? = null
     private val commandLaunch = CommandLaunchQueue()
+    private val voiceScreenOwners = mutableSetOf<String>()
     @Volatile var commandAccessForeground = false
         private set
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
@@ -32,6 +34,8 @@ class MainActivity : Activity() {
     lateinit var offlineTts: OfflineTtsController
         private set
     lateinit var commandAccess: CommandAccessController
+        private set
+    lateinit var wakePhrase: WakePhraseController
         private set
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -109,6 +113,7 @@ class MainActivity : Activity() {
         offlineSpeech = OfflineSpeechController(this, ::emitSpeechEvent)
         offlineTts = OfflineTtsController(this, ::emitTtsEvent)
         commandAccess = CommandAccessController(this)
+        wakePhrase = WakePhraseController(this, ::emitWakeEvent)
         webView.addJavascriptInterface(ArgusBridge(this), "ArgusAndroid")
 
         setContentView(webView)
@@ -133,18 +138,23 @@ class MainActivity : Activity() {
         if (::commandAccess.isInitialized) commandAccess.refresh(publish = true)
         if (::offlineSpeech.isInitialized) offlineSpeech.resume()
         if (::offlineTts.isInitialized) offlineTts.resume()
+        if (::wakePhrase.isInitialized) wakePhrase.resume()
         refreshReminderUi()
     }
 
     override fun onPause() {
         commandAccessForeground = false
+        if (::wakePhrase.isInitialized) wakePhrase.pause()
         if (::offlineSpeech.isInitialized) offlineSpeech.pause()
         if (::offlineTts.isInitialized) offlineTts.pause()
+        voiceScreenOwners.clear()
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         super.onPause()
     }
 
     override fun onDestroy() {
         commandAccessForeground = false
+        if (::wakePhrase.isInitialized) wakePhrase.destroy()
         if (::commandAccess.isInitialized) commandAccess.destroy()
         if (::backupDocuments.isInitialized) backupDocuments.destroy()
         if (::offlineSpeech.isInitialized) offlineSpeech.destroy()
@@ -183,6 +193,18 @@ class MainActivity : Activity() {
     fun emitTtsEvent(event: JSONObject) {
         if (!::webView.isInitialized || isDestroyed) return
         webView.evaluateJavascript("window.ArgusTtsInbox?.receive(${event})", null)
+    }
+
+    fun emitWakeEvent(event: JSONObject) {
+        if (!::webView.isInitialized || isDestroyed) return
+        webView.evaluateJavascript("window.ArgusWakeInbox?.receive($event)", null)
+    }
+
+    fun setVoiceScreenAwake(owner: String, keep: Boolean) {
+        if (keep && commandAccessForeground && !isDestroyed) voiceScreenOwners.add(owner)
+        else voiceScreenOwners.remove(owner)
+        if (voiceScreenOwners.isEmpty()) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

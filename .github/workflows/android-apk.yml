@@ -46,6 +46,9 @@ jobs:
       - name: Sync web core into Android assets
         run: node scripts/sync-native-assets.mjs
 
+      - name: Prepare verified offline wake runtime and model
+        run: python3 scripts/prepare-wake-runtime.py
+
       - name: Build debug APK
         run: gradle -p native-android testDebugUnitTest assembleDebug
 

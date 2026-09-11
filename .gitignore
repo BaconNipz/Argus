@@ -8,3 +8,7 @@ native-android/keystore/*.jks
 .DS_Store
 *.log
 *.zip
+native-android/.wake-cache/
+native-android/app/libs/*.aar
+native-android/app/src/main/assets/wake-model/
+__pycache__/

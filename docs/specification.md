@@ -176,3 +176,7 @@ Argus v0.6 adds the first local command layer:
 - No stealth collection, covert monitoring or bypassing platform permissions.
 - No automated scraping or account actions yet.
 - Android compilation runs in GitHub Actions; this workspace does not contain the Android SDK.
+
+## v0.13 Scope
+
+An experimental, explicitly armed foreground “Hey Argus” detector. The English sherpa-onnx KWS model and runtime ship inside the ARM64 APK. One session lasts at most five minutes and keeps the screen awake. A hit releases the wake microphone before a one-use, five-second handoff to existing on-device transcription. Commands still require review and explicit execution; external actions retain their approval flow. Stop, navigation, backgrounding, locking and destruction cancel the session. No persistence, auto-rearm, background microphone service or additional permission is introduced. Device recognition/noise/battery results gate any expansion beyond this prototype.

@@ -67,6 +67,7 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
     fun start(id: String, language: String) {
         if (destroyed) return
         if (!foreground) { event("error", id, message = "Open Argus before starting speech input."); return }
+        if (activity.wakePhrase.isBusy()) { event("error", id, message = "Stop wake listening and wait for the microphone to be released first."); return }
         if (session.current() != null) { event("error", id, message = "A speech session is already running."); return }
         refreshState()
         if (!JSONObject(cachedState).optBoolean("available")) { event("error", id, message = JSONObject(cachedState).getString("message")); return }
@@ -75,6 +76,7 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
             return
         }
         if (Build.VERSION.SDK_INT < 31 || !session.begin(id)) return
+        activity.setVoiceScreenAwake("speech", true)
         activity.offlineTts.stop(message = "Spoken reply stopped for microphone capture.")
         releaseProbe()
         try {
@@ -134,6 +136,7 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
     }
 
     private fun releaseRecognizer() {
+        activity.setVoiceScreenAwake("speech", false)
         captureTimeout?.let(handler::removeCallbacks)
         resultTimeout?.let(handler::removeCallbacks)
         captureTimeout = null
