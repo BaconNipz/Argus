@@ -9,8 +9,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.os.VibrationEffect
-import android.os.Vibrator
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.KeywordSpotter
 import com.k2fsa.sherpa.onnx.KeywordSpotterConfig
@@ -112,10 +110,7 @@ class WakePhraseController(private val activity: MainActivity, private val emit:
         clearTimers()
         message = "Hey Argus heard. Wake mode is off while you speak and review the command."
         publish()
-        runCatching {
-            activity.getSystemService(Vibrator::class.java)?.vibrate(VibrationEffect.createOneShot(60, VibrationEffect.DEFAULT_AMPLITUDE))
-        }
-        try { activity.offlineSpeech.start(speechId, language) }
+        try { activity.offlineSpeech.start(speechId, language, wakeReadyCue = true) }
         finally { activity.setVoiceScreenAwake("wake", false) }
     }
 

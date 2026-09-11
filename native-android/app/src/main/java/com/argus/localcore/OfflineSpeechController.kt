@@ -64,7 +64,7 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
         emit(state)
     }
 
-    fun start(id: String, language: String) {
+    fun start(id: String, language: String, wakeReadyCue: Boolean = false) {
         if (destroyed) return
         if (!foreground) { event("error", id, message = "Open Argus before starting speech input."); return }
         if (activity.wakePhrase.isBusy()) { event("error", id, message = "Stop wake listening and wait for the microphone to be released first."); return }
@@ -82,9 +82,18 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
         try {
             val engine = SpeechRecognizer.createOnDeviceSpeechRecognizer(activity)
             recognizer = engine
+            var readyCueSent = false
             engine.setRecognitionListener(object : SpeechListenerAdapter() {
                 override fun onReadyForSpeech(params: Bundle?) {
-                    if (session.accepts(id)) event("listening", id)
+                    if (!session.accepts(id)) return
+                    event("listening", id)
+                    if (wakeReadyCue && !readyCueSent) {
+                        readyCueSent = true
+                        runCatching {
+                            activity.getSystemService(android.os.Vibrator::class.java)?.vibrate(
+                                android.os.VibrationEffect.createOneShot(60, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                        }
+                    }
                 }
                 override fun onPartialResults(results: Bundle?) {
                     if (session.accepts(id)) event("partial", id, text = SpeechPolicy.firstTranscript(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)))

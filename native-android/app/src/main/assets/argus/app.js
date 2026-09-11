@@ -439,11 +439,13 @@ function renderWakePhrase() {
   const native = wakeBridgeAvailable();
   const mode = state.wakeMode;
   const busy = isWakeBusy(mode);
+  const capturing = mode.phase === "consumed" && isSpeechBusy(state.speechCapture);
+  const statusMessage = capturing ? state.speechCapture.message : mode.message || state.wakeInfo.message || "Wake mode is off.";
   const blocked = !state.wakeInfo.available || !state.speechInfo.available || !state.speechInfo.microphoneGranted ||
     isSpeechBusy(state.speechCapture) || state.speechCapture.phase === "review" || state.recording || state.commandBusy || state.routineBusy;
   return `<div class="speech-panel">
     <div class="section-head"><div><h2>Hey Argus</h2><p>Experimental wake listening while Command is open.</p></div>
-      <span class="status ${busy ? "ready" : "stub"}">${busy ? "microphone in use" : "off"}</span></div>
+      <span class="status ${busy || capturing ? "ready" : "stub"}">${capturing ? "command capture" : busy ? "microphone in use" : "off"}</span></div>
     ${native ? `<p>Start a test, say <strong>Hey Argus</strong>, then pause. After the short vibration and the <strong>Listening</strong> message, say your command.</p>
       <label class="field"><span>Wake sensitivity</span><select class="select" data-wake-sensitivity ${busy ? "disabled" : ""}>
         <option value="standard" ${state.wakeSensitivity === "standard" ? "selected" : ""}>Standard</option>
@@ -451,7 +453,8 @@ function renderWakePhrase() {
       </select></label>
       <div class="actions">${busy ? `<button class="button" type="button" data-action="stop-wake" ${mode.phase === "stopping" ? "disabled" : ""}>${mode.phase === "stopping" ? "Releasing microphone…" : "Stop wake listening"}</button>` :
         `<button class="button secondary" type="button" data-action="start-wake" ${blocked ? "disabled" : ""}>Listen for Hey Argus · 5 min</button>`}</div>
-      <p role="status">${escapeHtml(mode.message || state.wakeInfo.message || "Wake mode is off.")}</p>
+      <p role="status">${escapeHtml(statusMessage)}</p>
+      ${capturing ? `<button class="button quiet" type="button" data-action="cancel-speech">Cancel command recording</button>` : ""}
       ${!state.speechInfo.microphoneGranted ? `<p>Allow the microphone in Speak a command first.</p>` : ""}
       ${!state.speechInfo.available ? `<p>Starting a command after the wake phrase needs an available on-device speech service.</p>` : ""}
       ${state.speechCapture.phase === "review" ? `<p>Use or clear the recognised text before starting another wake test.</p>` : ""}
