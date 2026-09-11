@@ -64,9 +64,10 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
         emit(state)
     }
 
-    fun start(id: String, language: String) {
+    fun start(id: String, language: String, wakeReadyCue: Boolean = false) {
         if (destroyed) return
         if (!foreground) { event("error", id, message = "Open Argus before starting speech input."); return }
+        if (activity.wakePhrase.isBusy()) { event("error", id, message = "Stop wake listening and wait for the microphone to be released first."); return }
         if (session.current() != null) { event("error", id, message = "A speech session is already running."); return }
         refreshState()
         if (!JSONObject(cachedState).optBoolean("available")) { event("error", id, message = JSONObject(cachedState).getString("message")); return }
@@ -75,14 +76,24 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
             return
         }
         if (Build.VERSION.SDK_INT < 31 || !session.begin(id)) return
+        activity.setVoiceScreenAwake("speech", true)
         activity.offlineTts.stop(message = "Spoken reply stopped for microphone capture.")
         releaseProbe()
         try {
             val engine = SpeechRecognizer.createOnDeviceSpeechRecognizer(activity)
             recognizer = engine
+            var readyCueSent = false
             engine.setRecognitionListener(object : SpeechListenerAdapter() {
                 override fun onReadyForSpeech(params: Bundle?) {
-                    if (session.accepts(id)) event("listening", id)
+                    if (!session.accepts(id)) return
+                    event("listening", id)
+                    if (wakeReadyCue && !readyCueSent) {
+                        readyCueSent = true
+                        runCatching {
+                            activity.getSystemService(android.os.Vibrator::class.java)?.vibrate(
+                                android.os.VibrationEffect.createOneShot(60, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                        }
+                    }
                 }
                 override fun onPartialResults(results: Bundle?) {
                     if (session.accepts(id)) event("partial", id, text = SpeechPolicy.firstTranscript(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)))
@@ -134,6 +145,7 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
     }
 
     private fun releaseRecognizer() {
+        activity.setVoiceScreenAwake("speech", false)
         captureTimeout?.let(handler::removeCallbacks)
         resultTimeout?.let(handler::removeCallbacks)
         captureTimeout = null

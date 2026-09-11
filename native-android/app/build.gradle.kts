@@ -18,8 +18,9 @@ android {
         applicationId = "com.argus.localcore"
         minSdk = 28
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.12.0"
+        versionCode = 14
+        versionName = "0.13.0"
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     signingConfigs {
@@ -57,6 +58,7 @@ android {
 }
 
 dependencies {
+    implementation(files("libs/sherpa-onnx.aar"))
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
     testImplementation("junit:junit:4.13.2")
