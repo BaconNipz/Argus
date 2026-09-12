@@ -15,7 +15,7 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.14.0-native")
+            .put("version", "0.14.1-native")
             .put("host", "android")
             .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts", "command_access", "wake_phrase", "background_voice")))
             .put("message", "Android shell attached. Reminder alerts and on-device speech input/output are available to check.")
@@ -59,10 +59,21 @@ class ArgusBridge(private val activity: MainActivity) {
     fun openBackgroundVoiceSettings(ignored: String): String = guarded {
         check(activity.commandAccessForeground) { "Open Argus first." }
         activity.runOnUiThread { runCatching {
+            WakeFeedback.createChannel(activity)
             activity.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
                 .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
-                .putExtra(Settings.EXTRA_CHANNEL_ID, BackgroundWakeService.CHANNEL))
-        }.onFailure { BackgroundWake.update("error", "Open Android Settings, Apps, Argus, Notifications, Hey Argus listening.") } }
+                .putExtra(Settings.EXTRA_CHANNEL_ID, WakeFeedback.CHANNEL))
+        }.onFailure { BackgroundWake.update("error", "Open Android Settings, Apps, Argus, Notifications, Hey Argus wake alerts.") } }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun testWakeReadyCue(ignored: String): String = guarded {
+        check(activity.commandAccessForeground) { "Open Argus first." }
+        activity.runOnUiThread {
+            if (activity.commandAccessForeground && !VoiceAudioGate.busy()) WakeFeedback.ready(activity)
+            else BackgroundWake.update("waiting", "Pause Hey Argus and finish other audio before testing the ready cue.")
+        }
         JSONObject().put("status", "requested").toString()
     }
 
@@ -74,7 +85,7 @@ class ArgusBridge(private val activity: MainActivity) {
         val id = checkedSpeechId(input)
         val language = checkedSpeechLanguage(input)
         activity.runOnUiThread {
-            if (BackgroundWake.claim(activity, token, activity.commandAccessForeground)) {
+            if (BackgroundWake.claim(activity, token, activity.commandAccessForeground && activity.hasWindowFocus())) {
                 activity.offlineSpeech.start(id, language, wakeReadyCue = true)
             } else activity.emitSpeechEvent(JSONObject().put("type", "error").put("sessionId", id)
                 .put("message", "That wake request expired, was paused, or the phone is locked. Say Hey Argus again."))

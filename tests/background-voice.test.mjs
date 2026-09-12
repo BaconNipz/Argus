@@ -1,15 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { backgroundVoiceAvailable, backgroundVoiceBridge, canTakeBackgroundWake, microphoneLevel, spokenCommandMode } from "../src/background-voice.js";
+import { backgroundVoiceAvailable, backgroundVoiceBridge, canTakeBackgroundWake, hasUnfinishedWakeInput, microphoneLevel, spokenCommandMode } from "../src/background-voice.js";
 import { parseArgusCommand } from "../src/argus-core.js";
 
-const info = { enabled: true, pendingToken: "background-one" };
+const info = { enabled: true, commandVisible: true, pendingToken: "background-one" };
 const ready = { ready: true, visible: true, busy: false, editing: false, seen: "" };
 
 test("background capture needs an enabled, fresh native token and a ready visible app", () => {
   assert.equal(canTakeBackgroundWake(info, ready), true);
   for (const change of [{ ready: false }, { visible: false }, { busy: true }, { editing: true }, { seen: "background-one" }]) assert.equal(canTakeBackgroundWake(info, { ...ready, ...change }), false);
   assert.equal(canTakeBackgroundWake({ ...info, enabled: false }, ready), false);
+  assert.equal(canTakeBackgroundWake({ ...info, commandVisible: false }, ready), false);
+  assert.equal(canTakeBackgroundWake({ ...info, commandVisible: undefined }, ready), false);
   for (const token of ["", null, ["background-one"], "background-", "background-one\n", "background-" + "x".repeat(81), "speech-one"]) assert.equal(canTakeBackgroundWake({ ...info, pendingToken: token }, ready), false);
 });
 
@@ -33,12 +35,25 @@ test("unclear, negative and future commands require review", () => {
 
 test("background bridge cannot approve or dispatch an action", () => {
   let payload;
-  const bridge = Object.fromEntries(["getBackgroundWakeState", "configureBackgroundWake", "requestAssistantRole", "openBackgroundVoiceSettings", "startBackgroundSpeech", "finishBackgroundCommand"].map(method => [method, raw => { payload = JSON.parse(raw); return '{"status":"requested"}'; }]));
+  const bridge = Object.fromEntries(["getBackgroundWakeState", "configureBackgroundWake", "requestAssistantRole", "openBackgroundVoiceSettings", "testWakeReadyCue", "startBackgroundSpeech", "finishBackgroundCommand"].map(method => [method, raw => { payload = JSON.parse(raw); return '{"status":"requested"}'; }]));
   assert.equal(backgroundVoiceAvailable(bridge), true);
   backgroundVoiceBridge("startBackgroundSpeech", { token: "background-one", sessionId: "speech-one" }, bridge);
   assert.deepEqual(payload, { token: "background-one", sessionId: "speech-one" });
   assert.throws(() => backgroundVoiceBridge("dispatchAction", {}, bridge), /Unknown/);
   assert.throws(() => backgroundVoiceBridge("approveAction", {}, bridge), /Unknown/);
+});
+
+test("wake setup focus and an empty command field do not block a fresh wake", () => {
+  assert.equal(hasUnfinishedWakeInput({ focused: true, setupControl: true }), false);
+  assert.equal(hasUnfinishedWakeInput({ focused: true, emptyCommand: true }), false);
+  assert.equal(hasUnfinishedWakeInput({ focused: false }), false);
+});
+
+test("wake retries still protect dirty commands and other focused forms", () => {
+  assert.equal(hasUnfinishedWakeInput({ focused: true }), true);
+  assert.equal(hasUnfinishedWakeInput({ dirty: true, focused: false }), true);
+  assert.equal(hasUnfinishedWakeInput({ dirty: true, focused: true, setupControl: true }), true);
+  assert.equal(hasUnfinishedWakeInput({ dirty: true, emptyCommand: true }), true);
 });
 
 test("unavailable native background operations fail clearly", () => {

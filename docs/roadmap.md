@@ -149,3 +149,7 @@ This first release used typed commands and optional speech output. On-device spe
 - Validate backup restoration across development builds on the phone and refine format/error handling from feedback.
 
 Release signing still needs the four private GitHub Actions secrets. Debug builds remain a temporary testing path.
+
+## v0.14.1 Wake Feedback And Handoff Repair
+
+Phone feedback reported silent wake detections and command handling delayed until manual app opening. The patch adds a separate alerting wake notification, a command-ready beep with two vibrations, and setup diagnostics. The selected, system-bound assistant service first requests the existing Argus activity directly; one assistant-session fallback is available if it stays hidden. Fresh requests are replayed after native focus/WebView startup until claimed or expired. Setup-control focus no longer blocks capture; unfinished content remains protected. See `docs/releases/v0.14.1.md`. Samsung launch, sound and haptic behaviour still need phone validation.

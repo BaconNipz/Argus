@@ -30,6 +30,8 @@ object BackgroundWake {
     private var loaded = false
     private var captureOwner: Context? = null
     private var listenerOwner: Any? = null
+    private var foregroundOwner: Any? = null
+    @Volatile private var lastWake = "No wake detected in this app session."
     @Volatile var enabled = false
         private set
     @Volatile var running = false
@@ -49,7 +51,21 @@ object BackgroundWake {
     @Volatile private var screenAllowsListening = false
     private var listener: (() -> Unit)? = null
     fun attach(owner: Any, callback: () -> Unit) { listenerOwner = owner; listener = callback }
-    fun detach(owner: Any) { if (listenerOwner === owner) { listenerOwner = null; listener = null } }
+    fun detach(owner: Any) { if (listenerOwner === owner) { listenerOwner = null; listener = null }; foreground(owner, false) }
+    fun foreground(owner: Any, visible: Boolean) {
+        if (visible) foregroundOwner = owner else if (foregroundOwner === owner) foregroundOwner = null
+    }
+    fun commandVisible(): Boolean = foregroundOwner != null
+    fun handoff(token: String, detail: String) {
+        if (token.isEmpty() || token != pendingToken()) return
+        lastWake = detail
+        update("detected", detail)
+    }
+    fun ready(owner: Context) {
+        if (captureOwner !== owner) return
+        lastWake = "Command microphone ready. Speak after the beep and two vibrations."
+        update("command", lastWake)
+    }
 
     @Synchronized fun initialize(context: Context) {
         app = context.applicationContext
@@ -89,6 +105,7 @@ object BackgroundWake {
             .putBoolean("enabled", wanted).putString("sensitivity", mode).putBoolean("autoRun", executeLocal).apply()
         enabled = wanted; sensitivity = mode; autoRun = executeLocal; generation++
         ticket.clear(); captureOwner = null
+        if (!wanted) lastWake = "Hey Argus paused."
         cooldownUntil = SystemClock.elapsedRealtime() + 1000L
         if (wanted) ensureStarted(context) else {
             context.stopService(Intent(context, BackgroundWakeService::class.java))
@@ -128,9 +145,11 @@ object BackgroundWake {
         if (!enabled || !unlocked(context)) return null
         val token = "background-${UUID.randomUUID()}"
         if (!ticket.offer(token, SystemClock.elapsedRealtime())) return null
+        lastWake = "Hey Argus detected. Waiting for Command to open."
         handler.postDelayed({
             synchronized(this) {
-                if (!ticket.active(SystemClock.elapsedRealtime())) {
+                if (ticket.token == token && !ticket.active(SystemClock.elapsedRealtime())) {
+                    lastWake = "Wake request expired before command capture. Say Hey Argus again."
                     cooldownUntil = SystemClock.elapsedRealtime() + 3000
                     listener?.invoke()
                 }
@@ -142,6 +161,8 @@ object BackgroundWake {
     @Synchronized fun claim(context: Context, token: String, foreground: Boolean): Boolean {
         if (!enabled || !ticket.claim(token, SystemClock.elapsedRealtime(), foreground, unlocked(context))) return false
         captureOwner = context
+        lastWake = "Command opened. Starting the command microphone…"
+        BackgroundWakeService.dismissWakeAlert(context)
         return true
     }
 
@@ -176,6 +197,8 @@ object BackgroundWake {
             .put("audioBusy", VoiceAudioGate.busy())
             .put("message", message).put("sensitivity", sensitivity).put("autoRun", autoRun)
             .put("assistantActive", assistantActive(context)).put("notificationGranted", notificationsAllowed(context))
+            .put("assistantReady", ArgusVoiceInteractionService.isReady()).put("lastWake", lastWake)
+            .put("commandVisible", commandVisible())
             .put("microphoneGranted", context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
             .put("pendingToken", pendingToken()).put("micDb", micDb).put("micPeak", micPeak).toString()
     }

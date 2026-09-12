@@ -1,4 +1,4 @@
-# Argus v0.14.0
+# Argus v0.14.1
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
@@ -102,3 +102,5 @@ Argus v0.12 adds quicker access to Command. See [the v0.12 guide](docs/releases/
 Argus v0.13 adds a foreground wake-phrase prototype. See [the v0.13 guide](docs/releases/v0.13.0.md) for setup, model checks and the phone tests still needed.
 
 Argus v0.14 adds background voice activation. See [the v0.14 guide](docs/releases/v0.14.0.md) for one-time setup, command execution choices, lifecycle limits and phone testing.
+
+Argus v0.14.1 separates wake acknowledgement from the command-ready cue and repairs the assistant launch and WebView resume handoff. See [the patch guide](docs/releases/v0.14.1.md) for the two cues and a short phone check.

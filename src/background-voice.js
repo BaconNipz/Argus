@@ -1,4 +1,4 @@
-const METHODS = new Set(["getBackgroundWakeState", "configureBackgroundWake", "requestAssistantRole", "openBackgroundVoiceSettings", "startBackgroundSpeech", "finishBackgroundCommand"]);
+const METHODS = new Set(["getBackgroundWakeState", "configureBackgroundWake", "requestAssistantRole", "openBackgroundVoiceSettings", "testWakeReadyCue", "startBackgroundSpeech", "finishBackgroundCommand"]);
 const TOKEN = /^background-[a-zA-Z0-9-]{1,80}$/;
 
 export function backgroundVoiceAvailable(bridge = globalThis.window?.ArgusAndroid) {
@@ -13,8 +13,12 @@ export function backgroundVoiceBridge(method, payload = {}, bridge = globalThis.
 }
 
 export function canTakeBackgroundWake(info, { ready, visible, busy, editing, seen }) {
-  return info?.enabled === true && typeof info.pendingToken === "string" && info.pendingToken.trim() === info.pendingToken &&
+  return info?.enabled === true && info.commandVisible === true && typeof info.pendingToken === "string" && info.pendingToken.trim() === info.pendingToken &&
     TOKEN.test(info.pendingToken) && info.pendingToken !== seen && ready === true && visible === true && !busy && !editing;
+}
+
+export function hasUnfinishedWakeInput({ dirty, focused, setupControl, emptyCommand }) {
+  return Boolean(dirty || (focused && !setupControl && !emptyCommand));
 }
 
 // A recognised command can create local records or drafts. No dispatch/approval is done here.

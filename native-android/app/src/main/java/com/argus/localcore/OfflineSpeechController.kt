@@ -111,10 +111,8 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
                     event("listening", id)
                     if (wakeReadyCue && !readyCueSent) {
                         readyCueSent = true
-                        runCatching {
-                            activity.getSystemService(android.os.Vibrator::class.java)?.vibrate(
-                                android.os.VibrationEffect.createOneShot(60, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                        }
+                        BackgroundWake.ready(activity)
+                        WakeFeedback.ready(activity)
                     }
                 }
                 override fun onPartialResults(results: Bundle?) {

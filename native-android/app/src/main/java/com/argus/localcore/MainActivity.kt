@@ -6,6 +6,8 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.WindowManager
 import android.webkit.ValueCallback
 import android.webkit.JsResult
@@ -24,6 +26,20 @@ class MainActivity : Activity() {
     private var pendingReminder: String? = null
     private val commandLaunch = CommandLaunchQueue()
     private val voiceScreenOwners = mutableSetOf<String>()
+    private val wakeDeliveryHandler = Handler(Looper.getMainLooper())
+    private val wakeDelivery = object : Runnable {
+        override fun run() {
+            if (!commandAccessForeground || isDestroyed) return
+            emitBackgroundWakeEvent()
+            // Resume can run before WebView visibility/startup. Replay only the fresh,
+            // unclaimed request; native token claiming prevents duplicate capture.
+            if (BackgroundWake.pendingToken().isNotEmpty()) wakeDeliveryHandler.postDelayed(this, 350L)
+        }
+    }
+    private fun scheduleWakeDelivery() {
+        wakeDeliveryHandler.removeCallbacks(wakeDelivery)
+        if (commandAccessForeground) wakeDeliveryHandler.post(wakeDelivery)
+    }
     @Volatile var commandAccessForeground = false
         private set
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
@@ -107,6 +123,7 @@ class MainActivity : Activity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 flushPendingShare()
                 refreshReminderUi()
+                scheduleWakeDelivery()
             }
         }
         backupDocuments = BackupDocumentController(this)
@@ -132,11 +149,14 @@ class MainActivity : Activity() {
         pendingReminder = intent?.getStringExtra("argus_reminder")
         flushPendingShare()
         refreshReminderUi()
+        scheduleWakeDelivery()
     }
 
     override fun onResume() {
         super.onResume()
         commandAccessForeground = true
+        BackgroundWake.foreground(this, hasWindowFocus())
+        webView.onResume()
         if (::commandAccess.isInitialized) commandAccess.refresh(publish = true)
         if (::offlineSpeech.isInitialized) offlineSpeech.resume()
         if (::offlineTts.isInitialized) offlineTts.resume()
@@ -144,10 +164,20 @@ class MainActivity : Activity() {
         BackgroundWake.ensureStarted(this)
         emitBackgroundWakeEvent()
         refreshReminderUi()
+        scheduleWakeDelivery()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        BackgroundWake.foreground(this, hasFocus && commandAccessForeground)
+        if (hasFocus) scheduleWakeDelivery()
     }
 
     override fun onPause() {
         commandAccessForeground = false
+        BackgroundWake.foreground(this, false)
+        wakeDeliveryHandler.removeCallbacks(wakeDelivery)
+        webView.onPause()
         if (::wakePhrase.isInitialized) wakePhrase.pause()
         if (::offlineSpeech.isInitialized) offlineSpeech.pause()
         BackgroundWake.cancelClaim(this)
@@ -158,6 +188,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        wakeDeliveryHandler.removeCallbacksAndMessages(null)
         commandAccessForeground = false
         if (::wakePhrase.isInitialized) wakePhrase.destroy()
         BackgroundWake.detach(this)

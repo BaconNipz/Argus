@@ -26,6 +26,7 @@ class BackgroundWakeService : Service() {
         super.onCreate()
         active = this
         BackgroundWake.initialize(this)
+        WakeFeedback.createChannel(this)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Hey Argus listening", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Ongoing offline wake listening and its Pause control"
@@ -81,10 +82,22 @@ class BackgroundWakeService : Service() {
                 handler.post {
                     if (cancelled.get()) return@post
                     val token = BackgroundWake.detection(this) ?: return@post
-                    val shown = ArgusVoiceInteractionService.showWake(this, token)
-                    val detail = if (shown) "Hey Argus heard. Opening Command…" else "Hey Argus heard. Tap this notification to speak."
-                    BackgroundWake.update("detected", detail)
-                    getSystemService(NotificationManager::class.java).notify(ID, notification(detail, token))
+                    val detail = "Wake phrase detected. Wait for Command's ready beep and two vibrations, then speak."
+                    // This alert is independent of the WebView and command recognizer.
+                    wakeAlert(token, detail, first = true)
+                    ArgusVoiceInteractionService.openWake(this, token)
+                    handler.postDelayed({
+                        if (!cancelled.get()) ArgusVoiceInteractionService.showWake(this, token)
+                    }, 1500L)
+                    handler.postDelayed({
+                        if (!cancelled.get() && token == BackgroundWake.pendingToken() && !BackgroundWake.commandVisible()) {
+                            val fallback = if (BackgroundWake.assistantActive(this))
+                                "Command did not open. Tap this alert to speak; check Digital assistant setup in Argus."
+                            else "Tap this alert to speak. Select Argus as digital assistant to open automatically next time."
+                            BackgroundWake.handoff(token, fallback)
+                            wakeAlert(token, fallback, first = false)
+                        }
+                    }, 4000L)
                 }
                 // Keep the worker idle until the main thread offers the ticket.
                 Thread.sleep(500)
@@ -114,6 +127,19 @@ class BackgroundWakeService : Service() {
             .addAction(Notification.Action.Builder(null, "Pause Hey Argus", stop).build()).build()
     }
 
+    private fun wakeAlert(token: String, detail: String, first: Boolean) {
+        val open = Intent(this, MainActivity::class.java).setAction(BackgroundWake.ACTION)
+            .putExtra(BackgroundWake.EXTRA, token)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val content = PendingIntent.getActivity(this, ALERT_ID, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        getSystemService(NotificationManager::class.java).notify(ALERT_ID,
+            Notification.Builder(this, WakeFeedback.CHANNEL).setSmallIcon(R.drawable.ic_command)
+                .setContentTitle("Hey Argus heard").setContentText(detail)
+                .setStyle(Notification.BigTextStyle().bigText(detail)).setContentIntent(content)
+                .setAutoCancel(true).setOnlyAlertOnce(!first).setTimeoutAfter(if (first) 20_000L else 16_000L)
+                .setVisibility(Notification.VISIBILITY_PRIVATE).build())
+    }
+
     override fun onDestroy() {
         cancelled.set(true)
         if (active === this) {
@@ -123,6 +149,7 @@ class BackgroundWakeService : Service() {
             if (BackgroundWake.phase != "error") BackgroundWake.update("off", "Background listening stopped. Open Command to resume it.")
         }
         handler.removeCallbacksAndMessages(null)
+        dismissWakeAlert(this)
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
@@ -131,6 +158,10 @@ class BackgroundWakeService : Service() {
         private var active: BackgroundWakeService? = null
         const val CHANNEL = "argus_background_voice_v1"
         private const val ID = 740
+        private const val ALERT_ID = 742
+        fun dismissWakeAlert(context: android.content.Context) {
+            context.getSystemService(NotificationManager::class.java).cancel(ALERT_ID)
+        }
         private const val STOP = "com.argus.localcore.STOP_BACKGROUND_WAKE"
     }
 }

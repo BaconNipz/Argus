@@ -104,3 +104,7 @@ See `docs/releases/v0.13.0.md` for limits and physical-device validation. The sm
 `VoiceAudioGate` serialises keyword capture, command capture, the assistant recognition adapter and offline speech output. Manual speech briefly holds the background reader and waits for its microphone to close. The volume meter receives only RMS/peak values; sample audio is never persisted or sent to the WebView. The web app protects unfinished typed commands, consumes a capture result once and routes only known local actions or existing reviewed drafts. The new enabled preferences are excluded from Android backup/transfer and are paused before local data restore/wipe.
 
 See `docs/releases/v0.14.0.md` for setup and limitations. Assistant role availability, Samsung's launch behaviour and real microphone/battery performance need physical-device validation.
+
+## v0.14.1 Wake Feedback And Handoff Repair
+
+Phone feedback reported silent wake detections and command handling delayed until manual app opening. The patch adds a separate alerting wake notification, a command-ready beep with two vibrations, and setup diagnostics. The selected, system-bound assistant service first requests the existing Argus activity directly; one assistant-session fallback is available if it stays hidden. Fresh requests are replayed after native focus/WebView startup until claimed or expired. Setup-control focus no longer blocks capture; unfinished content remains protected. See `docs/releases/v0.14.1.md`. Samsung launch, sound and haptic behaviour still need phone validation.

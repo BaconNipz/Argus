@@ -38,7 +38,7 @@ import { beginSpeechOutput, emptySpeechOutput, isOutputBusy, reduceSpeechOutput,
 import { notificationAdvice } from "./notification-status.js";
 import { localStatusReply } from "./command-language.js";
 import { commandAccessAvailable, commandAccessBridge, takeCommandLaunch } from "./command-access.js";
-import { backgroundVoiceAvailable, backgroundVoiceBridge, canTakeBackgroundWake, microphoneLevel, spokenCommandMode } from "./background-voice.js";
+import { backgroundVoiceAvailable, backgroundVoiceBridge, canTakeBackgroundWake, hasUnfinishedWakeInput, microphoneLevel, spokenCommandMode } from "./background-voice.js";
 import { beginWakeMode, canStartWakeCapture, emptyWakeMode, isWakeBusy, reduceWakeMode, wakeBridge, wakeBridgeAvailable } from "./wake-phrase.js";
 import { MAX_BACKUP_BYTES, nativeBackupAvailable, readBackupFile, saveNativeBackup } from "./backup.js";
 import { CURRENT_ANDROID_BUILD, DEFAULT_UPDATE_MANIFEST_URL, checkForUpdate } from "./updater.js";
@@ -447,12 +447,14 @@ function renderBackgroundWake() {
   return `<div class="speech-panel">
     <div class="section-head"><div><h2>Hey Argus in other apps</h2><p>Keep wake listening enabled after a one-time setup.</p></div>
       <span class="status ${info.running ? "ready" : "stub"}" data-background-phase>${capture ? "command capture" : info.running ? info.phase : "off"}</span></div>
-    <p>Enable it here, switch to another app and say <strong>Hey Argus</strong>. Pause until the vibration, then speak your command. Listening resumes after the command finishes.</p>
+    <p>Enable it here, switch to another app and say <strong>Hey Argus</strong>. A wake alert acknowledges the phrase. Wait for the <strong>short ready beep and two vibrations</strong>, then speak your command. Listening resumes after the command finishes.</p>
     <div class="actions"><button class="button secondary" type="button" data-action="assistant-setup" ${busy ? "disabled" : ""}>${info.assistantActive ? "Digital assistant settings" : "Set Argus as digital assistant"}</button>
       ${!info.notificationGranted ? `<button class="button secondary" type="button" data-action="reminder-permission">Allow notifications</button>` : ""}
-      <button class="button quiet" type="button" data-action="background-notification-settings">Notification settings</button>
+      <button class="button quiet" type="button" data-action="background-notification-settings">Wake alert settings</button>
+      <button class="button quiet" type="button" data-action="test-wake-ready-cue" ${busy || info.running ? "disabled" : ""}>Test ready sound / vibration</button>
       <button class="button quiet" type="button" data-action="refresh-background-wake">Refresh setup</button></div>
-    <p>${info.assistantActive ? "Android has selected Argus as your digital assistant. It can request Command over another app." : "Select Argus in Android's digital assistant prompt to open Command hands-free. This changes your current default assistant. Without that selection, a detection waits for you to tap the Hey Argus notification."}</p>
+    <p>${info.assistantActive ? info.assistantReady ? "Argus is selected and connected as your digital assistant. It can request Command over another app." : "Argus is selected, but Android has not connected its assistant service yet. Re-select Argus in Digital assistant settings if this persists." : "Select Argus in Android's digital assistant prompt to open Command hands-free. This changes your current default assistant. Without that selection, a detection waits for you to tap the Hey Argus notification."}</p>
+    <p class="routine-help">Pause Hey Argus before testing the ready cue. Silent mode, Do Not Disturb, notification volume and wake alert settings can suppress feedback.</p>
     <label class="field"><span>Sensitivity</span><select class="select" data-background-sensitivity ${busy ? "disabled" : ""}>
       <option value="standard" ${info.sensitivity === "standard" ? "selected" : ""}>Standard</option>
       <option value="sensitive" ${info.sensitivity === "sensitive" ? "selected" : ""}>More sensitive</option></select></label>
@@ -462,6 +464,7 @@ function renderBackgroundWake() {
       ${info.enabled || info.running ? `<button class="button quiet" type="button" data-action="pause-background-wake">Pause Hey Argus</button>` : ""}
       ${capture ? `<button class="button quiet" type="button" data-action="cancel-speech">Cancel command recording</button>` : ""}</div>
     <p role="status" data-background-status>${escapeHtml(capture ? state.speechCapture.message : info.message || "Hey Argus is off.")}</p>
+    <p data-background-last-wake>Last wake: ${escapeHtml(info.lastWake || "No wake detected in this app session.")}</p>
     ${state.typedDraftDirty || state.speechCapture.phase === "review" ? `<p>Use or clear your current command text before another automatic wake capture.</p>` : ""}
     ${state.backgroundLastText ? `<p>Last heard: ${escapeHtml(state.backgroundLastText)}</p>` : ""}
     <p data-background-meter>${escapeHtml(microphoneLevel(info))}</p>
@@ -480,9 +483,14 @@ function configureBackgroundListening(enabled) {
 
 function drainBackgroundWake() {
   const info = state.backgroundWake;
+  const focus = document.activeElement;
+  const editing = hasUnfinishedWakeInput({ dirty: state.typedDraftDirty,
+    focused: Boolean(focus?.matches("input, textarea, select")),
+    setupControl: Boolean(focus?.matches("[data-background-sensitivity], [data-background-auto]")),
+    emptyCommand: Boolean(focus?.matches('[name="command"]') && !focus.value.trim()) });
   if (!canTakeBackgroundWake(info, { ready: state.dbReady, visible: !document.hidden,
     busy: state.backupBusy || state.commandBusy || state.routineBusy || state.recording || isWakeBusy(state.wakeMode) || isSpeechBusy(state.speechCapture) || state.speechCapture.phase === "review",
-    editing: state.typedDraftDirty || Boolean(document.activeElement?.matches("input, textarea, select")), seen: state.backgroundSeen })) return;
+    editing, seen: state.backgroundSeen })) return;
   state.backgroundSeen = info.pendingToken;
   stopSpeechOutput();
   state.activeView = "command";
@@ -2554,6 +2562,7 @@ app.addEventListener("click", async (event) => {
   if (state.backupBusy) throw new Error("Finish the current backup operation first.");
   if (action === "assistant-setup") backgroundVoiceBridge("requestAssistantRole");
   if (action === "background-notification-settings") backgroundVoiceBridge("openBackgroundVoiceSettings");
+  if (action === "test-wake-ready-cue") backgroundVoiceBridge("testWakeReadyCue");
   if (action === "enable-background-wake") configureBackgroundListening(true);
   if (action === "pause-background-wake") { configureBackgroundListening(false); cancelSpeechCapture(); }
   if (action === "refresh-background-wake") { refreshBackgroundWake(); render(); }
@@ -2849,12 +2858,14 @@ window.ArgusBackgroundWakeInbox = { receive(info) {
   drainBackgroundWake();
   const meter = app.querySelector("[data-background-meter]");
   if (meter) meter.textContent = microphoneLevel(info);
+  const lastWake = app.querySelector("[data-background-last-wake]");
+  if (lastWake) lastWake.textContent = `Last wake: ${info.lastWake || "No wake detected in this app session."}`;
   const status = app.querySelector("[data-background-status]");
   if (status && !state.backgroundCapture) status.textContent = info.message || "Hey Argus is off.";
   const phase = app.querySelector("[data-background-phase]");
   if (phase && !state.backgroundCapture) phase.textContent = info.running ? info.phase : "off";
   if (state.dbReady && state.activeView === "command" && !document.activeElement?.matches("input, textarea, select") &&
-    ["enabled", "running", "assistantActive", "autoRun", "sensitivity", "notificationGranted", "microphoneGranted"].some(key => old[key] !== info[key])) render();
+    ["enabled", "running", "assistantActive", "assistantReady", "autoRun", "sensitivity", "notificationGranted", "microphoneGranted"].some(key => old[key] !== info[key])) render();
 } };
 window.ArgusCommandAccessInbox = { receive(info) {
   if (!info || typeof info !== "object" || Array.isArray(info)) return;
