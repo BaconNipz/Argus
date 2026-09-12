@@ -801,3 +801,5 @@ audio {
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
+/* Keep the complete reviewed text readable without allowing long URLs to widen a card. */
+.phone-action-value { white-space: pre-wrap; overflow-wrap: anywhere; }

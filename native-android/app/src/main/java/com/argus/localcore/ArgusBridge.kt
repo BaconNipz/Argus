@@ -15,9 +15,9 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.14.1-native")
+            .put("version", "0.15.0-native")
             .put("host", "android")
-            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts", "command_access", "wake_phrase", "background_voice")))
+            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "map_search", "dial_number", "share_text", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts", "command_access", "wake_phrase", "background_voice")))
             .put("message", "Android shell attached. Reminder alerts and on-device speech input/output are available to check.")
             .toString()
     }
@@ -173,6 +173,7 @@ class ArgusBridge(private val activity: MainActivity) {
         val payload = action.optJSONObject("payload") ?: JSONObject()
 
         when (capability) {
+            "map_search", "dial_number", "share_text" -> PhoneActionLauncher.launch(activity, action)
             "open_url" -> openUrl(payload)
             "apk_update" -> openUrl(payload)
             else -> JSONObject()

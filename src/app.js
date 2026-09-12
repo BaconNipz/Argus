@@ -39,6 +39,7 @@ import { notificationAdvice } from "./notification-status.js";
 import { localStatusReply } from "./command-language.js";
 import { commandAccessAvailable, commandAccessBridge, takeCommandLaunch } from "./command-access.js";
 import { backgroundVoiceAvailable, backgroundVoiceBridge, canTakeBackgroundWake, hasUnfinishedWakeInput, microphoneLevel, spokenCommandMode } from "./background-voice.js";
+import { PHONE_ACTIONS, phoneActionInfo, phoneActionDraft, reviewPhoneAction } from "./phone-actions.js";
 import { beginWakeMode, canStartWakeCapture, emptyWakeMode, isWakeBusy, reduceWakeMode, wakeBridge, wakeBridgeAvailable } from "./wake-phrase.js";
 import { MAX_BACKUP_BYTES, nativeBackupAvailable, readBackupFile, saveNativeBackup } from "./backup.js";
 import { CURRENT_ANDROID_BUILD, DEFAULT_UPDATE_MANIFEST_URL, checkForUpdate } from "./updater.js";
@@ -76,6 +77,8 @@ const state = {
   tools: [],
   voiceNotes: [],
   actions: [],
+  phoneDraft: { kind: "map_search", value: "", id: "" },
+  actionDispatching: new Set(),
   reminders: [],
   reminderDraft: {},
   reminderPermission: false,
@@ -217,7 +220,7 @@ function statCount(view) {
   if (view === "workbench") return state.evidence.length;
   if (view === "tools") return state.tools.length;
   if (view === "voice") return state.voiceNotes.length;
-  if (view === "bridge") return state.actions.filter((action) => action.status !== "completed").length;
+  if (view === "bridge") return state.actions.filter((action) => !["completed", "handed_off", "cancelled"].includes(action.status)).length;
   return "";
 }
 
@@ -1722,6 +1725,25 @@ function renderVoiceNoteCard(note) {
   `;
 }
 
+function renderPhoneActionEditor() {
+  const draft = state.phoneDraft;
+  const info = phoneActionInfo(draft.kind) || PHONE_ACTIONS[0];
+  return `<section class="band">
+    <div class="section-head"><div><h2>${draft.id ? "Edit phone action" : "Prepare a phone action"}</h2>
+      <p>Choose the details here, then review the saved card before opening another app.</p></div></div>
+    <form class="quick-capture" data-form="phone-action">
+      <label class="field"><span>What would you like to do?</span>
+        <select class="select" name="kind" data-phone-kind>${PHONE_ACTIONS.map(item => `<option value="${item.id}" ${info.id === item.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label>
+      <label class="field"><span>${escapeHtml(info.label)}</span>
+        <textarea class="textarea" name="value" data-phone-value maxlength="${info.limit}" ${info.id === "dial_number" ? 'inputmode="tel"' : ""} required>${escapeHtml(draft.value)}</textarea></label>
+      <p>${escapeHtml(info.next)}</p>
+      ${info.id === "dial_number" ? `<p>Enter digits, with an optional + country code. Contact lookup and extensions are not available yet.</p>` : ""}
+      <div class="actions"><button class="button" type="submit">${draft.id ? "Save changes as draft" : "Save for review"}</button>
+        <button class="button quiet" type="button" data-action="clear-phone-draft">Clear editor</button></div>
+    </form>
+  </section>`;
+}
+
 function renderBridge() {
   const bridge = state.bridgeInfo || readNativeBridgeInfo();
   return `
@@ -1730,10 +1752,12 @@ function renderBridge() {
         <div>
           <p class="eyebrow">Android Bridge</p>
           <h1>Action queue</h1>
-          <p>Draft phone actions locally, confirm them, then dispatch only when a native bridge is attached.</p>
+          <p>Review each action, approve it, then choose when to open the other app.</p>
         </div>
         <span class="status ${bridge.available ? "ready" : "stub"}">${bridge.available ? "attached" : "web core"}</span>
       </div>
+      ${renderPhoneActionEditor()}
+      <details><summary>Other action drafts</summary>
       <form class="quick-capture" data-form="action">
         <div class="field-grid">
           <label class="field">
@@ -1743,7 +1767,7 @@ function renderBridge() {
           <label class="field">
             <span>Capability</span>
             <select class="select" name="capability">
-              ${ANDROID_BRIDGE_CAPABILITIES.map(
+              ${ANDROID_BRIDGE_CAPABILITIES.filter(capability => !phoneActionInfo(capability.id)).map(
                 (capability) => `<option value="${escapeHtml(capability.id)}">${escapeHtml(capability.name)}</option>`
               ).join("")}
             </select>
@@ -1769,6 +1793,7 @@ function renderBridge() {
         </label>
         <button class="button" type="submit">Queue Action</button>
       </form>
+      </details>
     </section>
     <section class="band">
       <div class="section-head">
@@ -1804,38 +1829,46 @@ function renderCapabilityCard(capability) {
 
 function renderActionCard(action) {
   const status = String(action.status || "draft");
+  const phone = reviewPhoneAction(action);
+  const busy = state.actionDispatching.has(action.id);
+  const editing = state.phoneDraft.id === action.id;
+  const terminal = ["completed", "handed_off", "cancelled"].includes(status);
+  const canOpen = !phone || state.bridgeInfo.capabilities?.includes(action.capability);
   return `
     <article class="card item-card">
       <header>
         <div>
           <h3>${escapeHtml(action.title)}</h3>
-          <p>${escapeHtml(action.capability)} · ${escapeHtml(formatDate(action.createdAt))}</p>
+          <p>${escapeHtml(phone?.name || action.capability)} · ${escapeHtml(formatDate(action.createdAt))}</p>
         </div>
         <span class="status ${escapeHtml(status)}">${escapeHtml(status.replaceAll("_", " "))}</span>
       </header>
-      <p>${escapeHtml(renderPayloadSummary(action.payload))}</p>
+      ${phone ? phone.valid ? `<p><strong>${escapeHtml(phone.label)}</strong></p><p class="phone-action-value">${escapeHtml(phone.value)}</p><p>${escapeHtml(phone.next)}</p>` : `<p role="alert">${escapeHtml(phone.error)} Edit this draft before approving it.</p>` : `<p>${escapeHtml(renderPayloadSummary(action.payload))}</p>`}
+      ${phone && !canOpen ? `<p>Opening this action requires the Argus v0.15 Android app.</p>` : ""}
       ${action.lastResult ? `<p>${escapeHtml(action.lastResult)}</p>` : ""}
+      ${editing ? `<p>Finish saving your edits, or clear the editor, before approving or opening this action.</p>` : ""}
       <div class="tag-row">
         <span class="tag">${escapeHtml(action.sensitivity || "normal")}</span>
         <span class="tag">${action.requiresConfirmation ? "confirmation required" : "direct"}</span>
       </div>
       <div class="actions">
         ${
-          status === "draft"
-            ? `<button class="button secondary" type="button" data-action="approve-action" data-id="${escapeHtml(action.id)}">Approve</button>`
+          (status === "draft" || phone && ["blocked", "failed", "waiting_for_bridge"].includes(status))
+            ? `<button class="button secondary" type="button" data-action="approve-action" data-id="${escapeHtml(action.id)}" ${busy || editing || phone && !phone.valid ? "disabled" : ""}>${status === "draft" ? "Approve" : "Review and approve again"}</button>`
             : ""
         }
         ${
-          status === "approved" || status === "waiting_for_bridge"
-            ? `<button class="button" type="button" data-action="dispatch-action" data-id="${escapeHtml(action.id)}">Dispatch</button>`
+          status === "approved" || !phone && status === "waiting_for_bridge"
+            ? `<button class="button" type="button" data-action="dispatch-action" data-id="${escapeHtml(action.id)}" ${busy || editing || !canOpen || phone && !phone.valid ? "disabled" : ""}>${phone ? phone.id === "map_search" ? "Open Maps" : phone.id === "dial_number" ? "Open dialer" : "Choose app to share" : "Dispatch"}</button>`
             : ""
         }
         ${
-          status !== "completed"
-            ? `<button class="button quiet" type="button" data-action="complete-action" data-id="${escapeHtml(action.id)}">Mark Done</button>`
+          !terminal
+            ? `<button class="button quiet" type="button" data-action="complete-action" data-id="${escapeHtml(action.id)}" ${busy ? "disabled" : ""}>${phone ? "Dismiss draft" : "Mark Done"}</button>`
             : ""
         }
-        <button class="button quiet" type="button" data-action="delete-action" data-id="${escapeHtml(action.id)}">Delete</button>
+        ${phone ? `<button class="button quiet" type="button" data-action="edit-phone-action" data-id="${escapeHtml(action.id)}" ${busy ? "disabled" : ""}>${terminal ? "Create another draft" : "Edit draft"}</button>` : ""}
+        <button class="button quiet" type="button" data-action="delete-action" data-id="${escapeHtml(action.id)}" ${busy ? "disabled" : ""}>Delete</button>
       </div>
     </article>
   `;
@@ -2297,6 +2330,18 @@ function parseActionPayload(value) {
   return { text };
 }
 
+async function handlePhoneAction(form) {
+  const input = new FormData(form);
+  const draft = phoneActionDraft(input.get("kind"), input.get("value"));
+  const existing = state.phoneDraft.id && state.actions.find(item => item.id === state.phoneDraft.id);
+  if (existing && state.actionDispatching.has(existing.id)) throw new Error("Wait for this action to finish opening.");
+  await putRecord("actions", existing ? { ...existing, ...draft, updatedAt: new Date().toISOString(), lastResult: "Changes saved. Review and approve again." } : createAction(draft));
+  state.phoneDraft = { kind: draft.capability, value: "", id: "" };
+  await logEvent("action", existing ? "Edited phone action; approval cleared." : "Saved a phone action for review.");
+  await loadData();
+  setToast("Phone action saved for review.");
+}
+
 async function handleAction(form) {
   const formData = new FormData(form);
   await putRecord(
@@ -2341,6 +2386,7 @@ async function handleImport(form) {
 }
 
 async function restoreBackup() {
+  if (state.actionDispatching.size) throw new Error("Wait for the current phone action to finish opening before restoring a backup.");
   const preview = state.backupPreview;
   if (!preview) throw new Error("Choose and review a backup first.");
   if (!window.confirm("Replace this device's Argus data with this backup? Existing reminders will be cancelled and restored reminders will be paused.")) return;
@@ -2364,6 +2410,7 @@ async function restoreBackup() {
     }
     state.backupPreview = null;
     state.reminderDraft = {};
+    state.phoneDraft = { kind: "map_search", value: "", id: "" };
     state.lastCommand = null;
     await logEvent("import", "Restored a reviewed Argus backup.");
     await loadData();
@@ -2497,6 +2544,7 @@ function stopRecording() {
 }
 
 async function wipeData() {
+  if (state.actionDispatching.size) throw new Error("Wait for the current phone action to finish opening before clearing data.");
   const confirmed = window.confirm("Clear all local Argus data on this device?");
   if (!confirmed) return;
   if (backgroundVoiceAvailable()) configureBackgroundListening(false);
@@ -2507,6 +2555,7 @@ async function wipeData() {
   }
   await ensureSeedData();
   state.reminderDraft = {};
+  state.phoneDraft = { kind: "map_search", value: "", id: "" };
   await loadData();
   setToast("Local data cleared.");
 }
@@ -2528,21 +2577,27 @@ async function updateAction(id, patch, message) {
 async function dispatchAction(id) {
   const action = state.actions.find((item) => item.id === id);
   if (!action) return;
+  if (state.actionDispatching.has(id)) return;
+  if (state.phoneDraft.id === id) throw new Error("Save your changes or clear the editor before opening this action.");
   if (action.capability === "local_reminder") {
     state.reminderDraft = { title: action.payload?.text || action.title };
     state.activeView = "routines";
     setToast("Choose a time to turn this draft into a reminder.");
     return;
   }
-  const result = await dispatchNativeAction(action);
-  await updateAction(
+  state.actionDispatching.add(id);
+  render();
+  try {
+    const result = await dispatchNativeAction(action);
+    await updateAction(
     id,
     {
       status: result.status,
       lastResult: result.message
     },
-    result.dispatched ? "Action dispatched." : "Action held locally."
-  );
+      result.dispatched ? result.status === "handed_off" ? "Handed to Android. Finish in the other app." : "Action dispatched." : "Action held locally."
+    );
+  } finally { state.actionDispatching.delete(id); render(); }
 }
 
 app.addEventListener("click", async (event) => {
@@ -2560,6 +2615,7 @@ app.addEventListener("click", async (event) => {
   const { action, id } = actionButton.dataset;
   try {
   if (state.backupBusy) throw new Error("Finish the current backup operation first.");
+  if (id && state.actionDispatching.has(id)) throw new Error("Wait for this action to finish opening.");
   if (action === "assistant-setup") backgroundVoiceBridge("requestAssistantRole");
   if (action === "background-notification-settings") backgroundVoiceBridge("openBackgroundVoiceSettings");
   if (action === "test-wake-ready-cue") backgroundVoiceBridge("testWakeReadyCue");
@@ -2674,16 +2730,31 @@ app.addEventListener("click", async (event) => {
     setToast("Voice note deleted.");
   }
   if (action === "approve-action") {
+    if (state.phoneDraft.id === id) throw new Error("Save your changes or clear the editor before approving this action.");
+    const review = reviewPhoneAction(state.actions.find(item => item.id === id));
+    if (review && !review.valid) throw new Error(review.error);
     await updateAction(id, { status: "approved" }, "Action approved.");
   }
+  if (action === "clear-phone-draft") { state.phoneDraft = { kind: "map_search", value: "", id: "" }; render(); }
+  if (action === "edit-phone-action") {
+    const item = state.actions.find(record => record.id === id);
+    const info = phoneActionInfo(item?.capability);
+    if (info && !state.actionDispatching.has(id)) {
+      state.phoneDraft = { kind: info.id, value: typeof item.payload?.[info.field] === "string" ? item.payload[info.field] : "", id: ["completed", "handed_off", "cancelled"].includes(item.status) ? "" : id };
+      render(); app.querySelector('[data-form="phone-action"]')?.scrollIntoView({ block: "start" });
+    }
+  }
   if (action === "complete-action") {
-    await updateAction(id, { status: "completed" }, "Action marked done.");
+    const phone = phoneActionInfo(state.actions.find(item => item.id === id)?.capability);
+    if (state.phoneDraft.id === id) state.phoneDraft = { kind: "map_search", value: "", id: "" };
+    await updateAction(id, { status: phone ? "cancelled" : "completed" }, phone ? "Draft dismissed." : "Action marked done.");
   }
   if (action === "dispatch-action") {
     await dispatchAction(id);
   }
   if (action === "delete-action") {
     await deleteRecord("actions", id);
+    if (state.phoneDraft.id === id) state.phoneDraft = { kind: "map_search", value: "", id: "" };
     await loadData();
     setToast("Action deleted.");
   }
@@ -2708,6 +2779,7 @@ app.addEventListener("click", async (event) => {
 });
 
 app.addEventListener("input", (event) => {
+  if (event.target.matches("[data-phone-value]")) state.phoneDraft.value = event.target.value;
   const form = event.target.closest('[data-form="reminder"]');
   if (form && event.target.name) state.reminderDraft[event.target.name] = event.target.value;
   if (event.target.closest('[data-form="command"]') && event.target.name === "command") {
@@ -2719,6 +2791,10 @@ app.addEventListener("input", (event) => {
 });
 
 app.addEventListener("change", async (event) => {
+  if (event.target.matches("[data-phone-kind]")) {
+    state.phoneDraft = { ...state.phoneDraft, kind: event.target.value, value: "" };
+    render(); return;
+  }
   if (event.target.matches("[data-wake-sensitivity]")) {
     if (["standard", "sensitive"].includes(event.target.value)) state.wakeSensitivity = event.target.value;
     return;
@@ -2776,6 +2852,7 @@ app.addEventListener("submit", async (event) => {
     if (formType === "evidence") await handleEvidence(form);
     if (formType === "tool") await handleTool(form);
     if (formType === "action") await handleAction(form);
+    if (formType === "phone-action") await handlePhoneAction(form);
     if (formType === "update-settings") await handleUpdateSettings(form);
     if (formType === "import-data") await routineChange(() => handleImport(form));
   } catch (error) {
