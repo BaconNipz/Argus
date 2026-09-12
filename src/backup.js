@@ -65,7 +65,7 @@ export async function readBackupFile(file) {
 }
 
 export function resetImportedAction(action) {
-  if (["completed", "failed", "cancelled"].includes(action.status)) return { ...action, requiresConfirmation: true };
+  if (["completed", "handed_off", "failed", "cancelled"].includes(action.status)) return { ...action, requiresConfirmation: true };
   return { ...action, status: "draft", requiresConfirmation: true, lastResult: "Restored from backup. Review and approve again before dispatch." };
 }
 

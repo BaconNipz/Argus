@@ -1,3 +1,5 @@
+import { reviewPhoneAction } from "./phone-actions.js";
+
 export function readNativeBridgeInfo() {
   const fallback = {
     available: false,
@@ -39,6 +41,8 @@ export async function dispatchNativeAction(action) {
   if (action?.status !== "approved") {
     return { dispatched: false, status: "blocked", message: "Approve the action before dispatch." };
   }
+  const review = reviewPhoneAction(action);
+  if (review && !review.valid) return { dispatched: false, status: "blocked", message: review.error };
   if (!window.ArgusAndroid?.dispatchAction) {
     return {
       dispatched: false,
@@ -48,16 +52,15 @@ export async function dispatchNativeAction(action) {
   }
 
   try {
-    const result = window.ArgusAndroid.dispatchAction(JSON.stringify(action));
-    let parsed = {};
-    try {
-      parsed = JSON.parse(result);
-    } catch {
-      parsed = { message: result };
+    const reviewedAction = review ? { ...action, payload: { [review.field]: review.value } } : action;
+    const result = window.ArgusAndroid.dispatchAction(JSON.stringify(reviewedAction));
+    const parsed = JSON.parse(result);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !["completed", "handed_off", "blocked", "failed", "waiting_for_bridge"].includes(parsed.status)) {
+      throw new Error("Android returned an unreadable action result. Check the other app before retrying.");
     }
-    const status = parsed.status || "completed";
+    const status = parsed.status;
     return {
-      dispatched: status === "completed",
+      dispatched: ["completed", "handed_off"].includes(status),
       status,
       message: parsed.message || result || "Native bridge accepted the action."
     };

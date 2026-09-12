@@ -140,9 +140,9 @@ This first release used typed commands and optional speech output. On-device spe
 
 ## Following slices
 
-- Add Android intents for safe actions.
+- Expand the reviewed Android actions from v0.15 using phone feedback.
 - Add notification triage.
-- Add clipboard/share workflows.
+- Expand explicit share workflows; consider clipboard capture only with a user control.
 - Add background checks with clear battery limits.
 - Use device feedback to choose whether an Argus-bundled offline speech engine is needed alongside the system adapter.
 - Use v0.14 phone feedback to tune wake recognition and validate default-assistant launch, microphone recovery and battery use before screen-off listening.
@@ -153,3 +153,14 @@ Release signing still needs the four private GitHub Actions secrets. Debug build
 ## v0.14.1 Wake Feedback And Handoff Repair
 
 Phone feedback reported silent wake detections and command handling delayed until manual app opening. The patch adds a separate alerting wake notification, a command-ready beep with two vibrations, and setup diagnostics. The selected, system-bound assistant service first requests the existing Argus activity directly; one assistant-session fallback is available if it stays hidden. Fresh requests are replayed after native focus/WebView startup until claimed or expired. Setup-control focus no longer blocks capture; unfinished content remains protected. See `docs/releases/v0.14.1.md`. Samsung launch, sound and haptic behaviour still need phone validation.
+
+## v0.15 Reviewed Phone Actions
+
+- Maps place/address searches, explicit numbers in the dialer and chosen text in Android’s share chooser.
+- Natural command variants and a simple editor with full review cards.
+- Save as draft, approve, then open; changes reset approval and restored pending actions need fresh approval.
+- Validate typed payloads on both sides of the bridge; reject contact names, service codes and extensions.
+- Require an unlocked, focused Argus activity for native handoff and suppress repeated taps.
+- Record “handed off” separately from completion; Argus cannot observe a call or sent message.
+- No additional Android permissions; v0.14.1 wake behavior stays available for ongoing phone testing.
+- Actual map/dialer/share apps still need phone validation. See `docs/releases/v0.15.0.md`.

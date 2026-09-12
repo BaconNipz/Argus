@@ -14,6 +14,7 @@ const files = [
   ["src/command-access.js", "command-access.js"],
   ["src/wake-phrase.js", "wake-phrase.js"],
   ["src/background-voice.js", "background-voice.js"],
+  ["src/phone-actions.js", "phone-actions.js"],
   ["src/backup.js", "backup.js"],
   ["src/routines.js", "routines.js"],
   ["src/speech.js", "speech.js"],

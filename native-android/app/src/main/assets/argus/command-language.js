@@ -1,9 +1,10 @@
 // English phrase rules only. Parsing never saves data or dispatches an action.
-export function normalizeCommandPhrase(input) {
-  let text = String(input || "").trim().replace(/[’‘]/g, "'").replace(/\s+/g, " ");
+export function normalizeCommandPhrase(input, { preserveBody = false } = {}) {
+  let text = String(input || "").trim();
+  if (!preserveBody) text = text.replace(/[’‘]/g, "'").replace(/\s+/g, " ");
   for (let pass = 0; pass < 4; pass += 1) {
     text = text.replace(/^(?:(?:hey|okay|ok)\s+)?argus\b[,:!]?\s*/i, "")
-      .replace(/^(?:please\s+|(?:can|could|would|will)\s+you\s+(?:please\s+)?|i(?:'d| would)\s+like\s+(?:you\s+)?to\s+)/i, "");
+      .replace(/^(?:please\s+|(?:can|could|would|will)\s+you\s+(?:please\s+)?|i(?:['’]d| would)\s+like\s+(?:you\s+)?to\s+)/i, "");
   }
   return text.trim();
 }

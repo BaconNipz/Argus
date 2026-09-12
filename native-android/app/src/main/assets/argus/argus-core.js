@@ -1,7 +1,8 @@
 import { restoreReminders } from "./routines.js";
 import { normalizeCommandPhrase, reminderCommandDraft } from "./command-language.js";
+import { parsePhoneCommand, PHONE_ACTIONS } from "./phone-actions.js";
 
-export const ARGUS_VERSION = "0.14.1";
+export const ARGUS_VERSION = "0.15.0";
 
 export const MEMORY_TYPES = ["note", "person", "project", "source", "place", "account", "task"];
 export const MEMORY_SENSITIVITY = ["normal", "sensitive", "private"];
@@ -23,6 +24,9 @@ export const COMMAND_INTENTS = [
   "source",
   "search",
   "open_url",
+  "map_search",
+  "dial_number",
+  "share_text",
   "local_reminder",
   "navigate",
   "status",
@@ -41,6 +45,9 @@ export const COMMAND_EXAMPLES = [
   "Remind me to review my notes every day at nine am",
   "Show me my reminders",
   "What is due today?",
+  "Show Adelaide Oval on maps",
+  "Open the dialer for 12345",
+  "Share this text: I'm on my way.",
   "Back up my data",
   "What can you do?"
 ];
@@ -256,6 +263,7 @@ export const MODULES = [
 ];
 
 export const ANDROID_BRIDGE_CAPABILITIES = [
+  ...PHONE_ACTIONS.map(item => ({ id: item.id, name: item.name, sensitivity: item.id === "map_search" ? "low" : "normal", status: "ready", description: item.next })),
   {
     id: "share_intake",
     name: "Share Intake",
@@ -418,11 +426,18 @@ export function parseArgusCommand(input, now = new Date()) {
   }
 
   const phrase = text.replace(/[.!?]+$/, "").replace(/,?\s+please$/i, "");
-  if ((/^(?:don't|do not|never|if|unless|when)\b/i.test(phrase) && !/^(?:don't|do not) (?:let me )?forget\b/i.test(phrase)) || /\b(?:and then|then|also|and)\s+(?:please\s+)?(?:open|visit|delete|wipe|send|save|remember|remind|start|create|export|import)\b/i.test(phrase)) {
+  if ((/^(?:don't|do not|never|if|unless|when)\b/i.test(phrase) && !/^(?:don't|do not) (?:let me )?forget\b/i.test(phrase)) || /\b(?:and then|then|also|and)\s+(?:please\s+)?(?:open|visit|delete|wipe|send|share|dial|call|phone|save|remember|remind|start|create|export|import)\b/i.test(phrase)) {
     return commandResult({ intent: "unknown", title: "Please give one clear instruction", response: "I have not changed anything. Use one instruction at a time; conditional instructions and chained actions are not supported.", safety: "no action", confidence: "low" });
   }
+  const phone = parsePhoneCommand(normalizeCommandPhrase(original, { preserveBody: true }));
+  if (phone) {
+    if (phone.error) return commandResult({ intent: "unknown", title: "Check the phone action", response: phone.error, confidence: "low", safety: "no action" });
+    return commandResult({ intent: phone.action.capability, title: phone.action.title,
+      response: "I prepared a phone action. Review its details in the action queue, approve it, then open the other app.",
+      payload: phone.action.payload, action: phone.action, targetView: "bridge", confidence: "high", safety: "queued for confirmation" });
+  }
   if (/^(?:help|show (?:me )?(?:the )?commands|what can you do|what commands (?:can i use|do you (?:know|understand)))$/i.test(phrase)) {
-    return commandResult({ intent: "help", title: "Command help", response: "I can save notes, start cases, save links, search your records, draft reminders and open app sections. You can say please or could you, and start with Hey Argus after tapping Start listening. Try the examples below.", confidence: "high" });
+    return commandResult({ intent: "help", title: "Command help", response: "I can save notes, start cases, save links, search your records, draft reminders and open app sections. I can also prepare a Maps search, dialer number or chosen text for sharing. Phone actions wait in the action queue for approval. Try the examples below.", confidence: "high" });
   }
   if (/^(?:read (?:that|it|the last reply) (?:back|out|aloud)|say that again|repeat (?:that|the last reply))$/i.test(phrase)) {
     return commandResult({ intent: "speak_reply", title: "Read the last reply", response: "Reading the previous command reply.", confidence: "high" });
@@ -997,7 +1012,7 @@ export function summarizeStats({
     tools: tools.length,
     voiceNotes: voiceNotes.length,
     actions: actions.length,
-    pendingActions: actions.filter((action) => action.status !== "completed").length,
+    pendingActions: actions.filter((action) => !["completed", "handed_off", "cancelled"].includes(action.status)).length,
     readyModules: MODULES.filter((module) => module.status === "ready").length,
     plannedModules: MODULES.filter((module) => module.status !== "ready").length
   };
