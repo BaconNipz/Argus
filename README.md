@@ -1,8 +1,8 @@
-# Argus v0.13.0
+# Argus v0.14.1
 
 Argus is a phone-first, local-first personal assistant and OSINT workbench designed for a Samsung Galaxy S23 Ultra. The core rule is simple: Argus should work without a mandatory subscription, cloud server, or paid AI API.
 
-The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.13 adds an experimental offline “Hey Argus” test while Command is open. Arm it for up to five minutes, say the phrase, pause and wait for Listening, then speak a command for review. It stops after one detection or when the app leaves the foreground. The wake runtime/model are bundled in the ARM64 APK; command transcription uses the existing Android on-device service. Phone backups, broader English commands, reminders and offline speech input/output remain available. The release workflow can publish signed APKs once private signing secrets are configured.
+The current build has an offline web core and a native Android shell under `native-android/`. Argus v0.14 adds opt-in background Hey Argus with a remembered enabled setting and an ongoing Pause notification. Selecting Argus as Android's digital assistant lets it request Command over another app after a detection. Supported local voice commands can run automatically, while reminders and external actions remain reviewed drafts. The listener pauses while the phone is locked or the screen is off. The wake model and runtime remain bundled in the ARM64 APK. Phone backups, broader English commands, reminders and offline speech input/output remain available. The release workflow can publish signed APKs once private signing secrets are configured.
 
 ## What Argus Does Now
 
@@ -21,6 +21,7 @@ The current build has an offline web core and a native Android shell under `nati
 - Captures spoken commands using Android's dedicated on-device recognizer, with a typed fallback on unsupported devices.
 - Checks microphone permission and offline language availability, and can request language-pack downloads when supported.
 - Keeps recognised speech as review text until you choose to use and run it.
+- Offers remembered background wake listening, digital-assistant setup and live microphone-volume feedback.
 - Offers opt-in foreground “Hey Argus” listening with Standard / More sensitive settings, explicit Stop and bounded microphone ownership.
 - Opens Command from a pinned home-screen shortcut, the app icon's long-press menu or a Quick Settings tile. Recording still starts with an explicit tap.
 - Queues URL-opening commands for confirmation before dispatch.
@@ -99,3 +100,7 @@ Argus v0.11 adds phone backup and broader commands. See [the v0.11 guide](docs/r
 Argus v0.12 adds quicker access to Command. See [the v0.12 guide](docs/releases/v0.12.0.md) for shortcut/tile setup, phone checks and current limits.
 
 Argus v0.13 adds a foreground wake-phrase prototype. See [the v0.13 guide](docs/releases/v0.13.0.md) for setup, model checks and the phone tests still needed.
+
+Argus v0.14 adds background voice activation. See [the v0.14 guide](docs/releases/v0.14.0.md) for one-time setup, command execution choices, lifecycle limits and phone testing.
+
+Argus v0.14.1 separates wake acknowledgement from the command-ready cue and repairs the assistant launch and WebView resume handoff. See [the patch guide](docs/releases/v0.14.1.md) for the two cues and a short phone check.

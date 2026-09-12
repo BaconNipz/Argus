@@ -1,6 +1,6 @@
 # Argus Native Android Shell
 
-Argus v0.13 uses a native Kotlin WebView shell, WorkManager reminders with notification actions, on-device speech input and offline voice output. APKs and native unit tests build through GitHub Actions or Android Studio; the development workspace does not contain the Android SDK.
+Argus v0.14 uses a native Kotlin WebView shell, WorkManager reminders with notification actions, on-device speech input and offline voice output. APKs and native unit tests build through GitHub Actions or Android Studio; the development workspace does not contain the Android SDK.
 
 ## Target Stack
 
@@ -94,3 +94,17 @@ After a hit, the existing dedicated Android on-device recognizer captures a comm
 The preparation script requires Python 3.11+ and curl. It downloads fixed public release artifacts, verifies byte length and SHA-256, and extracts only named regular-file model members. Downloads are needed on the build machine, not the user's phone. AAR/cache/model binaries are ignored by Git. Use `--cache-dir PATH` to reuse already verified artifacts. Model provenance and licence notices ship inside the APK. CI runs preparation before native unit tests and assembly. This build packages only `arm64-v8a`, matching the S23 Ultra; it is not an x86 emulator build.
 
 See `docs/releases/v0.13.0.md` for limits and physical-device validation. The small synthetic check is evidence that the model loads and can detect the phrase, not a real-world accuracy or battery measurement.
+
+## v0.14 Background Voice
+
+`BackgroundWakeService` is an unexported microphone foreground service. `BackgroundWake` owns remembered enable/sensitivity/autorun preferences and a single expiring native ticket. A detection is offered only after `WakeAudioReader` releases its recorder and model. A 20-second unclaimed ticket grants one foreground/unlocked command capture and a maximum 60-second command lease. Completion, cancellation or expiry releases the lease before another wake cycle. Stop persists off; microphone/notification errors stop the service until a later eligible start. Lock/screen-off pauses audio without a wake lock.
+
+`ArgusVoiceInteractionService` is selected through Android's assistant role prompt and requests a `VoiceInteractionSession` without assist/screenshot data. The separate session process uses `startAssistantActivity` to open Command. `ArgusRecognitionService` fulfils assistant metadata and delegates only to the dedicated on-device recognizer; it never uses the generic default recognizer. All exported voice services require the corresponding system binding permission. No overlay, accessibility, boot receiver or privileged background-start permission is requested.
+
+`VoiceAudioGate` serialises keyword capture, command capture, the assistant recognition adapter and offline speech output. Manual speech briefly holds the background reader and waits for its microphone to close. The volume meter receives only RMS/peak values; sample audio is never persisted or sent to the WebView. The web app protects unfinished typed commands, consumes a capture result once and routes only known local actions or existing reviewed drafts. The new enabled preferences are excluded from Android backup/transfer and are paused before local data restore/wipe.
+
+See `docs/releases/v0.14.0.md` for setup and limitations. Assistant role availability, Samsung's launch behaviour and real microphone/battery performance need physical-device validation.
+
+## v0.14.1 Wake Feedback And Handoff Repair
+
+Phone feedback reported silent wake detections and command handling delayed until manual app opening. The patch adds a separate alerting wake notification, a command-ready beep with two vibrations, and setup diagnostics. The selected, system-bound assistant service first requests the existing Argus activity directly; one assistant-session fallback is available if it stays hidden. Fresh requests are replayed after native focus/WebView startup until claimed or expired. Setup-control focus no longer blocks capture; unfinished content remains protected. See `docs/releases/v0.14.1.md`. Samsung launch, sound and haptic behaviour still need phone validation.

@@ -31,7 +31,9 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
     init { refreshState() }
 
     fun snapshot(): String = cachedState
-    fun isCapturing(): Boolean = session.current() != null
+    private var pendingStart: String? = null
+    private var audioOwner: String? = null
+    fun isCapturing(): Boolean = session.current() != null || pendingStart != null
 
     fun resume() { foreground = true; refreshState() }
 
@@ -66,7 +68,25 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
 
     fun start(id: String, language: String, wakeReadyCue: Boolean = false) {
         if (destroyed) return
-        if (!foreground) { event("error", id, message = "Open Argus before starting speech input."); return }
+        if (!foreground || !BackgroundWake.unlocked(activity)) { event("error", id, message = "Open and unlock Argus before starting speech input."); return }
+        if (pendingStart != null) { event("error", id, message = "A speech start is already pending."); return }
+        activity.offlineTts.stop(message = "Spoken reply stopped for microphone capture.")
+        if (VoiceAudioGate.busy() && BackgroundWake.running && !activity.wakePhrase.isBusy() && session.current() == null) {
+            pendingStart = id
+            BackgroundWake.localHoldUntil = android.os.SystemClock.elapsedRealtime() + 40_000L
+            val deadline = android.os.SystemClock.elapsedRealtime() + 4000L
+            handler.post(object : Runnable {
+                override fun run() {
+                    if (pendingStart != id) return
+                    if (!foreground || destroyed || android.os.SystemClock.elapsedRealtime() >= deadline) {
+                        pendingStart = null; BackgroundWake.localHoldUntil = 0L
+                        event("error", id, message = "The microphone did not become available. Pause Hey Argus and try again.")
+                    } else if (VoiceAudioGate.busy()) handler.postDelayed(this, 50L)
+                    else { pendingStart = null; start(id, language, wakeReadyCue) }
+                }
+            })
+            return
+        }
         if (activity.wakePhrase.isBusy()) { event("error", id, message = "Stop wake listening and wait for the microphone to be released first."); return }
         if (session.current() != null) { event("error", id, message = "A speech session is already running."); return }
         refreshState()
@@ -75,7 +95,9 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
             event("error", id, message = "Allow microphone access, then tap Start listening again.")
             return
         }
-        if (Build.VERSION.SDK_INT < 31 || !session.begin(id)) return
+        if (!VoiceAudioGate.acquire(id)) { event("error", id, message = "Another Argus audio operation is active."); return }
+        audioOwner = id
+        if (Build.VERSION.SDK_INT < 31 || !session.begin(id)) { VoiceAudioGate.release(id); audioOwner = null; return }
         activity.setVoiceScreenAwake("speech", true)
         activity.offlineTts.stop(message = "Spoken reply stopped for microphone capture.")
         releaseProbe()
@@ -89,10 +111,8 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
                     event("listening", id)
                     if (wakeReadyCue && !readyCueSent) {
                         readyCueSent = true
-                        runCatching {
-                            activity.getSystemService(android.os.Vibrator::class.java)?.vibrate(
-                                android.os.VibrationEffect.createOneShot(60, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                        }
+                        BackgroundWake.ready(activity)
+                        WakeFeedback.ready(activity)
                     }
                 }
                 override fun onPartialResults(results: Bundle?) {
@@ -120,6 +140,11 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
     }
 
     fun cancel(id: String? = null, message: String = "Speech capture cancelled. Your typed command is unchanged.") {
+        val pending = pendingStart
+        if (pending != null && (id == null || id == pending)) {
+            pendingStart = null; BackgroundWake.localHoldUntil = 0L
+            event("cancelled", pending, message = message)
+        }
         val active = session.current() ?: return
         if (id != null && id != active) return
         if (!session.finish(active)) return
@@ -154,6 +179,9 @@ class OfflineSpeechController(private val activity: MainActivity, private val em
         recognizer = null
         runCatching { old?.cancel() }
         runCatching { old?.destroy() }
+        audioOwner?.let(VoiceAudioGate::release); audioOwner = null
+        BackgroundWake.localHoldUntil = 0L
+        BackgroundWake.cooldownUntil = android.os.SystemClock.elapsedRealtime() + 5000L
     }
 
     fun checkLanguage(language: String, download: Boolean = false) {

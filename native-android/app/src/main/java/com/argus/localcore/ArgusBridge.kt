@@ -15,9 +15,9 @@ class ArgusBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun getBridgeInfo(): String {
         return JSONObject()
-            .put("version", "0.13.0-native")
+            .put("version", "0.14.1-native")
             .put("host", "android")
-            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts", "command_access", "wake_phrase")))
+            .put("capabilities", JSONArray(listOf("share_intake", "open_url", "apk_update", "file_picker", "document_backup", "local_reminder", "offline_speech", "offline_tts", "command_access", "wake_phrase", "background_voice")))
             .put("message", "Android shell attached. Reminder alerts and on-device speech input/output are available to check.")
             .toString()
     }
@@ -27,6 +27,78 @@ class ArgusBridge(private val activity: MainActivity) {
 
     @JavascriptInterface
     fun getWakeState(ignored: String): String = activity.wakePhrase.snapshot()
+
+    @JavascriptInterface
+    fun getBackgroundWakeState(ignored: String): String = BackgroundWake.snapshot(activity)
+
+    @JavascriptInterface
+    fun configureBackgroundWake(payload: String): String = guarded {
+        check(activity.commandAccessForeground) { "Open Argus to change background listening." }
+        val input = JSONObject(payload)
+        val enabled = input.getBoolean("enabled")
+        val sensitivity = input.getString("sensitivity")
+        val autoRun = input.getBoolean("autoRun")
+        WakePolicy.sensitivity(sensitivity)
+        if (enabled) BackgroundWake.requirements(activity)?.let { throw IllegalStateException(it) }
+        activity.runOnUiThread {
+            if (activity.commandAccessForeground) runCatching { BackgroundWake.configure(activity, enabled, sensitivity, autoRun) }
+                .onFailure { BackgroundWake.update("error", it.message ?: "Background voice setup failed.") }
+        }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun requestAssistantRole(ignored: String): String = guarded {
+        check(activity.commandAccessForeground) { "Open Argus first." }
+        activity.runOnUiThread { runCatching { BackgroundWake.requestAssistant(activity) }
+            .onFailure { BackgroundWake.update("error", "Open Android Settings, Default apps, Digital assistant app and select Argus.") } }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun openBackgroundVoiceSettings(ignored: String): String = guarded {
+        check(activity.commandAccessForeground) { "Open Argus first." }
+        activity.runOnUiThread { runCatching {
+            WakeFeedback.createChannel(activity)
+            activity.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, WakeFeedback.CHANNEL))
+        }.onFailure { BackgroundWake.update("error", "Open Android Settings, Apps, Argus, Notifications, Hey Argus wake alerts.") } }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun testWakeReadyCue(ignored: String): String = guarded {
+        check(activity.commandAccessForeground) { "Open Argus first." }
+        activity.runOnUiThread {
+            if (activity.commandAccessForeground && !VoiceAudioGate.busy()) WakeFeedback.ready(activity)
+            else BackgroundWake.update("waiting", "Pause Hey Argus and finish other audio before testing the ready cue.")
+        }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun startBackgroundSpeech(payload: String): String = guarded {
+        val input = JSONObject(payload)
+        val token = input.getString("token")
+        require(token.matches(Regex("background-[a-zA-Z0-9-]{1,80}")))
+        val id = checkedSpeechId(input)
+        val language = checkedSpeechLanguage(input)
+        activity.runOnUiThread {
+            if (BackgroundWake.claim(activity, token, activity.commandAccessForeground && activity.hasWindowFocus())) {
+                activity.offlineSpeech.start(id, language, wakeReadyCue = true)
+            } else activity.emitSpeechEvent(JSONObject().put("type", "error").put("sessionId", id)
+                .put("message", "That wake request expired, was paused, or the phone is locked. Say Hey Argus again."))
+        }
+        JSONObject().put("status", "requested").toString()
+    }
+
+    @JavascriptInterface
+    fun finishBackgroundCommand(payload: String): String = guarded {
+        val token = JSONObject(payload).getString("token")
+        activity.runOnUiThread { BackgroundWake.finish(token) }
+        JSONObject().put("status", "requested").toString()
+    }
 
     @JavascriptInterface
     fun startWakeListening(payload: String): String = guarded {
